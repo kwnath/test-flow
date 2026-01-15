@@ -1,0 +1,10 @@
+# State
+tmp/
+
+# Go
+workflow-mcp
+*.exe
+
+# IDE
+.idea/
+.vscode/
