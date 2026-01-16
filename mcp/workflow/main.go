@@ -38,6 +38,15 @@ type StepMetadata struct {
 	ApprovalPrompt   string `json:"approval_prompt,omitempty"`
 }
 
+// Artifact stores step outputs in a consistent structure
+type Artifact struct {
+	Type      string `json:"type"`                 // "plan", "criteria", "pr", "test_results", etc.
+	Content   any    `json:"content"`              // flexible content (string, []string, map, etc.)
+	Step      string `json:"step"`                 // which step created this
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
 // Workflow configuration (loaded from YAML)
 type WorkflowConfig struct {
 	Name        string       `yaml:"name" json:"name"`
@@ -55,17 +64,20 @@ type StepConfig struct {
 
 // Workflow runtime state
 type WorkflowState struct {
-	ID                   string         `json:"id"`
-	Task                 string         `json:"task"`
-	CurrentStep          string         `json:"current_step"`
-	Steps                []WorkflowStep `json:"steps"`
-	WaitingForApproval   bool           `json:"waiting_for_approval"`
-	ImplementationPlan   string         `json:"implementation_plan,omitempty"`
-	VerificationCriteria []string       `json:"verification_criteria,omitempty"`
-	IterationCount       int            `json:"iteration_count"`
-	IterationFeedback    []string       `json:"iteration_feedback,omitempty"`
-	CreatedAt            string         `json:"created_at"`
-	UpdatedAt            string         `json:"updated_at"`
+	ID                 string              `json:"id"`
+	Task               string              `json:"task"`
+	CurrentStep        string              `json:"current_step"`
+	Steps              []WorkflowStep      `json:"steps"`
+	WaitingForApproval bool                `json:"waiting_for_approval"`
+	Artifacts          map[string]Artifact `json:"artifacts,omitempty"`
+	IterationCount     int                 `json:"iteration_count"`
+	IterationFeedback  []string            `json:"iteration_feedback,omitempty"`
+	// PR tracking
+	PRNumber         int    `json:"pr_number,omitempty"`
+	LastCommentCheck string `json:"last_comment_check,omitempty"`
+	LastCommentCount int    `json:"last_comment_count,omitempty"`
+	CreatedAt        string `json:"created_at"`
+	UpdatedAt        string `json:"updated_at"`
 }
 
 type WorkflowStep struct {
@@ -98,7 +110,7 @@ var configFile string
 var defaultApprovalPrompts = map[string]string{
 	"plan":     "Review the implementation plan. Does this approach look correct? You can approve with /workflow-approve or request changes with /workflow-iterate <feedback>",
 	"criteria": "Review the completion criteria. Are these the right things to verify? Approve with /workflow-approve or iterate with /workflow-iterate <feedback>",
-	"pr":       "Review the pull request. Ready to merge? Approve with /workflow-approve or request changes with /workflow-iterate <feedback>",
+	"review":   "PR review complete. Ready to merge? Approve with /workflow-approve to finish, or /workflow-iterate <feedback> for more changes.",
 }
 
 func main() {
@@ -137,7 +149,8 @@ func loadConfig() {
 			{Name: "criteria", NeedsApproval: true, AllowsIteration: true, ApprovalPrompt: defaultApprovalPrompts["criteria"], Instructions: "Define specific, measurable completion criteria."},
 			{Name: "execute", NeedsApproval: false, AllowsIteration: true, Instructions: "Implement the changes."},
 			{Name: "verify", NeedsApproval: false, AllowsIteration: true, Instructions: "Run tests and verify all criteria pass."},
-			{Name: "pr", NeedsApproval: true, AllowsIteration: false, ApprovalPrompt: defaultApprovalPrompts["pr"], Instructions: "Create a pull request."},
+			{Name: "pr", NeedsApproval: false, AllowsIteration: false, Instructions: "Create a pull request."},
+			{Name: "review", NeedsApproval: true, AllowsIteration: true, ApprovalPrompt: defaultApprovalPrompts["review"], Instructions: "Monitor PR for comments, address feedback, check every 2 mins."},
 			{Name: "complete", NeedsApproval: false, AllowsIteration: false, Instructions: "Summarize accomplishments."},
 		},
 	}
@@ -277,17 +290,52 @@ func handleRequest(req Request) Response {
 						},
 					},
 					{
-						"name":        "workflow_set_plan",
-						"description": "Set the implementation/design plan. Store the plan so it can be displayed and referenced.",
+						"name":        "workflow_set_artifact",
+						"description": "Store an artifact (plan, criteria, test results, etc.) in the workflow state. Artifacts are keyed by type and can be retrieved by vibe apps.",
 						"inputSchema": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
-								"plan": map[string]any{
+								"type": map[string]any{
 									"type":        "string",
-									"description": "The implementation or design plan (can include markdown, diagrams, etc.)",
+									"description": "Artifact type (e.g., 'plan', 'criteria', 'pr', 'test_results')",
+								},
+								"content": map[string]any{
+									"description": "The artifact content (string, array, or object)",
 								},
 							},
-							"required": []string{"plan"},
+							"required": []string{"type", "content"},
+						},
+					},
+					{
+						"name":        "workflow_set_pr",
+						"description": "Set the PR number for tracking. Used by the review step to monitor comments.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"pr_number": map[string]any{
+									"type":        "integer",
+									"description": "The pull request number",
+								},
+								"pr_url": map[string]any{
+									"type":        "string",
+									"description": "The pull request URL (optional)",
+								},
+							},
+							"required": []string{"pr_number"},
+						},
+					},
+					{
+						"name":        "workflow_check_pr",
+						"description": "Check if there are new PR comments since last check. Returns comment status and suggests next action.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"comment_count": map[string]any{
+									"type":        "integer",
+									"description": "Current number of comments on the PR (from gh pr view)",
+								},
+							},
+							"required": []string{"comment_count"},
 						},
 					},
 				},
@@ -360,6 +408,29 @@ func handleToolCall(name string, args map[string]any) string {
 			plan = p
 		}
 		return workflowSetPlan(plan)
+	case "workflow_set_artifact":
+		artifactType := ""
+		if t, ok := args["type"].(string); ok {
+			artifactType = t
+		}
+		content := args["content"]
+		return workflowSetArtifact(artifactType, content)
+	case "workflow_set_pr":
+		prNumber := 0
+		if n, ok := args["pr_number"].(float64); ok {
+			prNumber = int(n)
+		}
+		prURL := ""
+		if u, ok := args["pr_url"].(string); ok {
+			prURL = u
+		}
+		return workflowSetPR(prNumber, prURL)
+	case "workflow_check_pr":
+		commentCount := 0
+		if c, ok := args["comment_count"].(float64); ok {
+			commentCount = int(c)
+		}
+		return workflowCheckPR(commentCount)
 	default:
 		return `{"error": "unknown tool"}`
 	}
@@ -404,6 +475,7 @@ func workflowInit(task string) string {
 		CurrentStep:        firstStep.Name,
 		Steps:              steps,
 		WaitingForApproval: false, // Not waiting yet - work must be done first
+		Artifacts:          make(map[string]Artifact),
 		IterationCount:     0,
 		IterationFeedback:  []string{},
 		CreatedAt:          time.Now().UTC().Format(time.RFC3339),
@@ -461,17 +533,23 @@ func workflowStatus() string {
 	}
 
 	result := map[string]any{
-		"workflow_id":           state.ID,
-		"task":                  state.Task,
-		"current_step":          state.CurrentStep,
-		"waiting_for_approval":  state.WaitingForApproval,
-		"implementation_plan":   state.ImplementationPlan,
-		"verification_criteria": state.VerificationCriteria,
-		"iteration_count":       state.IterationCount,
-		"iteration_feedback":    state.IterationFeedback,
-		"progress":              fmt.Sprintf("%.0f%%", progress),
-		"instructions":          instructions,
-		"steps":                 state.Steps,
+		"workflow_id":          state.ID,
+		"task":                 state.Task,
+		"current_step":         state.CurrentStep,
+		"waiting_for_approval": state.WaitingForApproval,
+		"artifacts":            state.Artifacts,
+		"iteration_count":      state.IterationCount,
+		"iteration_feedback":   state.IterationFeedback,
+		"progress":             fmt.Sprintf("%.0f%%", progress),
+		"instructions":         instructions,
+		"steps":                state.Steps,
+	}
+
+	// Add PR tracking if set
+	if state.PRNumber > 0 {
+		result["pr_number"] = state.PRNumber
+		result["last_comment_check"] = state.LastCommentCheck
+		result["last_comment_count"] = state.LastCommentCount
 	}
 
 	if metadata != nil {
@@ -811,53 +889,164 @@ func workflowIterate(feedback string) string {
 }
 
 func workflowSetCriteria(criteria []string) string {
+	// Legacy function - now uses artifacts internally
+	return workflowSetArtifact("criteria", criteria)
+}
+
+func workflowSetPlan(plan string) string {
+	// Legacy function - now uses artifacts internally
+	return workflowSetArtifact("plan", plan)
+}
+
+func workflowSetArtifact(artifactType string, content any) string {
 	if state == nil {
 		return `{"error": "no workflow initialized"}`
 	}
 
-	state.VerificationCriteria = criteria
-	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	if state.Artifacts == nil {
+		state.Artifacts = make(map[string]Artifact)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	artifact := Artifact{
+		Type:      artifactType,
+		Content:   content,
+		Step:      state.CurrentStep,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	// If artifact already exists, preserve CreatedAt
+	if existing, ok := state.Artifacts[artifactType]; ok {
+		artifact.CreatedAt = existing.CreatedAt
+	}
+
+	state.Artifacts[artifactType] = artifact
+	state.UpdatedAt = now
 	saveState()
 
 	event := WorkflowEvent{
 		Event:      "workflow",
-		Type:       "criteria_set",
+		Type:       "artifact_set",
 		WorkflowID: state.ID,
 		Step:       state.CurrentStep,
-		Message:    fmt.Sprintf("Set %d verification criteria", len(criteria)),
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Message:    fmt.Sprintf("Artifact '%s' has been set", artifactType),
+		Timestamp:  now,
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"criteria_set": true,
-		"criteria":     criteria,
+		"artifact_set": true,
+		"type":         artifactType,
+		"step":         state.CurrentStep,
 		"event":        event,
 	}, "", "  ")
 	return string(output)
 }
 
-func workflowSetPlan(plan string) string {
+func workflowSetPR(prNumber int, prURL string) string {
 	if state == nil {
 		return `{"error": "no workflow initialized"}`
 	}
 
-	state.ImplementationPlan = plan
+	state.PRNumber = prNumber
+	state.LastCommentCheck = time.Now().UTC().Format(time.RFC3339)
+	state.LastCommentCount = 0
 	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	// Also store as artifact
+	prArtifact := map[string]any{
+		"number": prNumber,
+		"url":    prURL,
+	}
+	if state.Artifacts == nil {
+		state.Artifacts = make(map[string]Artifact)
+	}
+	state.Artifacts["pr"] = Artifact{
+		Type:      "pr",
+		Content:   prArtifact,
+		Step:      state.CurrentStep,
+		CreatedAt: state.UpdatedAt,
+	}
+
 	saveState()
 
 	event := WorkflowEvent{
 		Event:      "workflow",
-		Type:       "plan_set",
+		Type:       "pr_set",
 		WorkflowID: state.ID,
 		Step:       state.CurrentStep,
-		Message:    "Implementation plan has been set",
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Message:    fmt.Sprintf("PR #%d set for tracking", prNumber),
+		Timestamp:  state.UpdatedAt,
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"plan_set": true,
-		"plan":     plan,
-		"event":    event,
+		"pr_set":    true,
+		"pr_number": prNumber,
+		"pr_url":    prURL,
+		"event":     event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowCheckPR(commentCount int) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	if state.PRNumber == 0 {
+		return `{"error": "no PR set", "hint": "call workflow_set_pr first"}`
+	}
+
+	now := time.Now().UTC()
+	lastCheck, _ := time.Parse(time.RFC3339, state.LastCommentCheck)
+	timeSinceLastCheck := now.Sub(lastCheck)
+
+	hasNewComments := commentCount > state.LastCommentCount
+	noNewCommentsTimeout := 1 * time.Minute
+
+	// Update tracking
+	state.LastCommentCheck = now.Format(time.RFC3339)
+	previousCount := state.LastCommentCount
+	state.LastCommentCount = commentCount
+	state.UpdatedAt = now.Format(time.RFC3339)
+	saveState()
+
+	var action string
+	var message string
+
+	if hasNewComments {
+		newCount := commentCount - previousCount
+		action = "address_comments"
+		message = fmt.Sprintf("Found %d new comment(s). Address the feedback, then check again.", newCount)
+	} else if timeSinceLastCheck >= noNewCommentsTimeout {
+		// No new comments for 1+ minute - ready to proceed
+		action = "ready_for_approval"
+		message = "No new comments for 1+ minute. Ready to call workflow_next for approval."
+	} else {
+		// Still within timeout window, keep waiting
+		waitSeconds := int((noNewCommentsTimeout - timeSinceLastCheck).Seconds())
+		action = "wait"
+		message = fmt.Sprintf("No new comments yet. Wait %d seconds then check again.", waitSeconds)
+	}
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "pr_check",
+		WorkflowID: state.ID,
+		Step:       state.CurrentStep,
+		Message:    message,
+		Timestamp:  now.Format(time.RFC3339),
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"pr_number":           state.PRNumber,
+		"comment_count":       commentCount,
+		"previous_count":      previousCount,
+		"has_new_comments":    hasNewComments,
+		"seconds_since_check": int(timeSinceLastCheck.Seconds()),
+		"action":              action,
+		"message":             message,
+		"event":               event,
 	}, "", "  ")
 	return string(output)
 }

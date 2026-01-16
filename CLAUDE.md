@@ -44,12 +44,15 @@ steps:
 ### Available Tools
 
 - `workflow_init(task)` - Initialize workflow, returns first step instructions
-- `workflow_status()` - Get current state, progress, plan, and instructions
+- `workflow_status()` - Get current state, progress, artifacts, and instructions
 - `workflow_next()` - Request to proceed. If step requires approval, sets `awaiting_approval` status
 - `workflow_approve()` - Approve current step and move to next (only when `awaiting_approval`)
 - `workflow_iterate(feedback)` - Provide feedback and iterate on current step
-- `workflow_set_plan(plan)` - Store the implementation/design plan for display
-- `workflow_set_criteria(criteria[])` - Set verification criteria
+- `workflow_set_artifact(type, content)` - Store any artifact (plan, criteria, test_results, etc.)
+- `workflow_set_plan(plan)` - Store the implementation plan (shorthand for set_artifact)
+- `workflow_set_criteria(criteria[])` - Set verification criteria (shorthand for set_artifact)
+- `workflow_set_pr(pr_number, pr_url)` - Set PR number for tracking in review step
+- `workflow_check_pr(comment_count)` - Check for new PR comments, returns suggested action
 - `workflow_step(step, status)` - Update a specific step's status
 - `workflow_blocked(reason)` - Mark as blocked by external dependency
 
@@ -68,8 +71,9 @@ steps:
 2. **criteria** (requires approval, allows iteration) - Define completion criteria
 3. **execute** (allows iteration) - Implement changes
 4. **verify** (allows iteration) - Run tests, check all criteria pass
-5. **pr** (requires approval) - Create pull request
-6. **complete** - Summarize accomplishments
+5. **pr** - Create pull request, track with `workflow_set_pr()`
+6. **review** (requires approval, allows iteration) - Monitor PR comments, address feedback
+7. **complete** - Summarize accomplishments
 
 ### Approval Flow
 
@@ -80,13 +84,18 @@ The approval flow works as follows:
 1. You work on a step (e.g., create a plan with diagrams)
 2. When done, call `workflow_next()` - this sets status to `awaiting_approval`
 3. **STOP AND WAIT** - Do NOT proceed until user responds
-4. User reviews and responds with:
-   - `/workflow-approve` - Approved, move to next step
-   - `/workflow-iterate <feedback>` - Revise based on feedback
+4. User reviews and responds - detect their intent:
+   - **Approval signals** → call `workflow_approve()`:
+     - "looks good", "approved", "lgtm", "go ahead", "proceed", "yes", "ok", "ship it"
+   - **Iteration signals** → call `workflow_iterate(feedback)`:
+     - Any feedback, questions, or change requests
+   - **Explicit commands** (also work):
+     - `/workflow-approve` - Approved
+     - `/workflow-iterate <feedback>` - Iterate with feedback
 5. If iterating, revise your work and call `workflow_next()` again
 6. Repeat until approved
 
-**DO NOT auto-proceed through approval gates. Always wait for explicit user approval.**
+**DO NOT auto-proceed through approval gates. Always wait for user response.**
 
 ### Plan Step Instructions
 
@@ -100,7 +109,7 @@ When in the **plan** step:
    - Component relationships
    - Before/after states
 4. Present the complete plan to the user in a clear, structured format
-5. **Call `workflow_set_plan(plan)` to store the COMPLETE plan** - save the ENTIRE plan exactly as you presented it to the user, including all diagrams, options, details, and explanations. Do NOT summarize or condense it.
+5. **Call `workflow_set_plan(plan)` to store the COMPLETE plan** - save the full plan with all diagrams, options, details, and explanations. Do NOT summarize. But do NOT include exploration noise (tool outputs, file listings, grep results, "Running: find..." etc). Only the clean, presentable plan content.
 6. Call `workflow_next()` to request approval
 7. **STOP AND WAIT** for the user to respond with either:
    - `/workflow-approve` - Proceed to criteria step
@@ -109,7 +118,7 @@ When in the **plan** step:
 
 **DO NOT proceed to the criteria step until the user explicitly approves the plan.**
 
-**IMPORTANT: The plan saved via `workflow_set_plan()` must be the COMPLETE plan, not a summary. External apps display this plan to users, so it must contain all details, diagrams, options, and explanations.**
+**IMPORTANT: The plan saved via `workflow_set_plan()` must be the COMPLETE plan, not a summary. External apps display this plan to users. Include all details, diagrams, options, and explanations - but exclude exploration noise (tool outputs, file listings, command results). Just the clean plan.**
 
 ### Criteria Step Instructions
 
@@ -123,6 +132,29 @@ When in the **criteria** step:
 6. **STOP AND WAIT** for user approval or iteration feedback
 
 **DO NOT proceed to execute until the user explicitly approves the criteria.**
+
+### PR Step Instructions
+
+When in the **pr** step:
+
+1. Create a descriptive pull request using `gh pr create`
+2. Extract the PR number from the output
+3. Call `workflow_set_pr(pr_number, pr_url)` to track the PR
+4. Call `workflow_next()` to move to the review step
+
+### Review Step Instructions
+
+When in the **review** step:
+
+1. Run `gh pr view <pr_number> --comments --json comments` to get comments
+2. Count the comments and call `workflow_check_pr(comment_count)`
+3. Based on the `action` returned:
+   - `"address_comments"` - Read and address the new comments, then check again
+   - `"wait"` - Wait the suggested seconds, then check again
+   - `"ready_for_approval"` - No new comments for 1+ minute, call `workflow_next()`
+4. After calling `workflow_next()`, **STOP AND WAIT** for user approval
+
+**The review step polls for PR comments. If no new comments for 1 minute, it's ready for approval.**
 
 ### Verification Criteria
 
@@ -154,16 +186,18 @@ Tools emit structured events for external systems:
 {"event": "workflow", "type": "iteration", "step": "plan", "message": "feedback here"}
 ```
 
-Event types: `init`, `step_update`, `step_complete`, `awaiting_approval`, `approved`, `iteration`, `blocked`, `criteria_set`
+Event types: `init`, `step_update`, `step_complete`, `awaiting_approval`, `approved`, `iteration`, `blocked`, `artifact_set`, `pr_set`, `pr_check`
 
 ### State Persistence
 
 State is saved to `~/state/workflow_state.json`. After context compaction, call `workflow_status()` to restore awareness.
 
 State includes:
+- `artifacts` - Map of stored artifacts (plan, criteria, pr, test_results, etc.)
 - `iteration_count` - How many times current step has been iterated
 - `iteration_feedback` - Array of all feedback received on current step
 - `waiting_for_approval` - Whether step is awaiting approval
+- `pr_number`, `last_comment_check`, `last_comment_count` - PR tracking for review step
 
 ### Best Practices
 

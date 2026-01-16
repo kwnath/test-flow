@@ -19,14 +19,35 @@ Poll or watch `~/state/workflow_state.json` for the current state:
   "task": "Add user authentication",
   "current_step": "plan",
   "waiting_for_approval": true,
-  "implementation_plan": "## Plan\n\n### Architecture\n...",
-  "verification_criteria": ["Tests pass", "No errors"],
+  "artifacts": {
+    "plan": {
+      "type": "plan",
+      "content": "## Plan\n\n### Architecture\n...",
+      "step": "plan",
+      "created_at": "2025-01-15T12:00:00Z"
+    },
+    "criteria": {
+      "type": "criteria",
+      "content": ["Tests pass", "No errors"],
+      "step": "criteria",
+      "created_at": "2025-01-15T12:05:00Z"
+    },
+    "pr": {
+      "type": "pr",
+      "content": {"number": 123, "url": "https://github.com/..."},
+      "step": "pr",
+      "created_at": "2025-01-15T12:30:00Z"
+    }
+  },
   "iteration_count": 1,
   "iteration_feedback": ["Add error handling section"],
+  "pr_number": 123,
+  "last_comment_check": "2025-01-15T12:35:00Z",
+  "last_comment_count": 2,
   "steps": [
     {
       "name": "plan",
-      "status": "awaiting_approval",
+      "status": "completed",
       "needs_approval": true,
       "metadata": {
         "requires_approval": true,
@@ -35,8 +56,8 @@ Poll or watch `~/state/workflow_state.json` for the current state:
       }
     },
     {
-      "name": "criteria",
-      "status": "pending",
+      "name": "review",
+      "status": "in_progress",
       "needs_approval": true
     }
   ]
@@ -50,11 +71,34 @@ Poll or watch `~/state/workflow_state.json` for the current state:
 | `task` | What the user asked for | Always |
 | `current_step` | Active step name | Always |
 | `waiting_for_approval` | Whether human input needed | Always |
-| `implementation_plan` | The design/plan (markdown) | When set |
-| `verification_criteria` | List of things to verify | When set |
+| `artifacts.plan.content` | The design/plan (markdown) | When set |
+| `artifacts.criteria.content` | List of things to verify | When set |
+| `artifacts.pr.content` | PR number and URL | During PR/review |
 | `iteration_count` | How many revisions | During approval |
 | `iteration_feedback` | All feedback given | During approval |
+| `pr_number` | PR being tracked | During review step |
 | `steps[].status` | Step progress | Progress bar |
+
+## Artifacts Model
+
+Artifacts provide a **consistent structure** for storing any workflow output:
+
+```typescript
+interface Artifact {
+  type: string;      // "plan", "criteria", "pr", "test_results", etc.
+  content: any;      // string, array, or object
+  step: string;      // which step created it
+  created_at: string;
+  updated_at?: string;
+}
+```
+
+Access artifacts by type:
+- `artifacts.plan.content` - The implementation plan (string, markdown)
+- `artifacts.criteria.content` - Verification criteria (array of strings)
+- `artifacts.pr.content` - PR info (object with `number` and `url`)
+
+Artifacts are extensible - new types can be added without code changes.
 
 ## Step Statuses
 
@@ -118,21 +162,33 @@ Events are emitted to stdout as JSON. Parse Claude's output for lines containing
 }
 ```
 
-**`plan_set`** - Plan was stored (UPDATE PLAN DISPLAY)
+**`artifact_set`** - Any artifact was stored (UPDATE DISPLAY)
 ```json
 {
   "event": "workflow",
-  "type": "plan_set",
-  "message": "Implementation plan has been set"
+  "type": "artifact_set",
+  "step": "plan",
+  "message": "Artifact 'plan' has been set"
 }
 ```
 
-**`criteria_set`** - Criteria were stored
+**`pr_set`** - PR number was set for tracking
 ```json
 {
   "event": "workflow",
-  "type": "criteria_set",
-  "message": "Set 3 verification criteria"
+  "type": "pr_set",
+  "step": "pr",
+  "message": "PR #123 set for tracking"
+}
+```
+
+**`pr_check`** - PR comment check result
+```json
+{
+  "event": "workflow",
+  "type": "pr_check",
+  "step": "review",
+  "message": "No new comments for 1+ minute. Ready for approval."
 }
 ```
 
@@ -164,13 +220,24 @@ When `waiting_for_approval: true`, show approval UI:
 └─────────────────────────────────────────┘
 ```
 
-### Option 2: Chat Commands
-Tell the user they can type:
+### Option 2: Natural Language
+Users can just say:
+- "looks good", "approved", "lgtm", "go ahead" → triggers approval
+- Any feedback or questions → triggers iteration
+
+### Option 3: Chat Commands
+Explicit commands also work:
 - `/workflow-approve` - Approve and continue
 - `/workflow-iterate <feedback>` - Request changes
 
 ### Triggering Approval
-Send to Claude:
+Send to Claude (any of these work):
+```
+looks good
+```
+```
+approved, go ahead
+```
 ```
 /workflow-approve
 ```
@@ -178,12 +245,17 @@ Send to Claude:
 ### Triggering Iteration
 Send to Claude:
 ```
-/workflow-iterate Please add error handling to the plan
+Can you add error handling to the plan?
+```
+```
+/workflow-iterate Please add error handling
 ```
 
-## Displaying the Plan
+## Displaying Artifacts
 
-The `implementation_plan` field contains markdown. Render it with:
+Access artifact content via `artifacts.<type>.content`:
+
+**Plan** (`artifacts.plan.content`) - markdown string
 - Code blocks (may contain ASCII diagrams)
 - Mermaid diagrams (```mermaid blocks)
 - Headers, lists, etc.
@@ -214,8 +286,8 @@ Example plan content:
 Build a progress bar from `steps` array:
 
 ```
-Plan ✓ → Criteria ✓ → Execute ● → Verify ○ → PR ○ → Complete ○
-[====================|          ] 40%
+Plan ✓ → Criteria ✓ → Execute ✓ → Verify ✓ → PR ✓ → Review ● → Complete ○
+[======================================|     ] 71%
 ```
 
 Calculate: `completed_steps / total_steps * 100`
@@ -233,12 +305,19 @@ Calculate: `completed_steps / total_steps * 100`
 ## Example: React Component State
 
 ```typescript
+interface Artifact {
+  type: string;
+  content: any;
+  step: string;
+  created_at: string;
+}
+
 interface WorkflowDisplay {
   task: string;
   currentStep: string;
   waitingForApproval: boolean;
-  plan: string | null;
-  criteria: string[];
+  artifacts: Record<string, Artifact>;
+  prNumber: number | null;
   progress: number;
   steps: Array<{
     name: string;
@@ -254,12 +333,22 @@ function parseWorkflowState(json: string): WorkflowDisplay {
     task: state.task,
     currentStep: state.current_step,
     waitingForApproval: state.waiting_for_approval,
-    plan: state.implementation_plan || null,
-    criteria: state.verification_criteria || [],
+    artifacts: state.artifacts || {},
+    prNumber: state.pr_number || null,
     progress: (completed / state.steps.length) * 100,
     steps: state.steps,
   };
 }
+
+// Helper to get artifact content
+function getArtifact<T>(state: WorkflowDisplay, type: string): T | null {
+  return state.artifacts[type]?.content as T || null;
+}
+
+// Usage
+const plan = getArtifact<string>(state, 'plan');
+const criteria = getArtifact<string[]>(state, 'criteria');
+const pr = getArtifact<{number: number, url: string}>(state, 'pr');
 ```
 
 ## File Locations
