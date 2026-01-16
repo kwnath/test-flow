@@ -1,5 +1,23 @@
 # CLAUDE.md
 
+## CRITICAL: Always Use Workflow First
+
+**When the user asks you to build, create, implement, or fix anything, you MUST immediately call `workflow_init(task)` as your FIRST action.**
+
+Do NOT:
+- Ask clarifying questions first
+- Ask what kind of feature they want
+- Wait for the user to explicitly say `/workflow-start`
+
+Do THIS:
+1. User says "Create a todo app" → Immediately call `workflow_init("Create a todo app")`
+2. User says "Fix the login bug" → Immediately call `workflow_init("Fix the login bug")`
+3. User says "Add dark mode" → Immediately call `workflow_init("Add dark mode")`
+
+The workflow system handles planning and requirements gathering. Start the workflow FIRST, then explore and plan during the plan step.
+
+---
+
 ## Dynamic Workflow System
 
 This project uses a configurable workflow system for structured task management. Workflows are defined in YAML and support approval gates for human checkpoints.
