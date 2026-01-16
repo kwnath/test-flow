@@ -13,16 +13,20 @@ steps:
       - /workflow-approve to proceed to defining criteria
       - /workflow-iterate <feedback> to request changes
     instructions: |
-      Explore the codebase and design your approach:
+      **Phase 1: Clarify (if needed)**
+      - Review the task requirements
+      - If anything is ambiguous, ask clarifying questions
+      - Wait for answers before proceeding to design
+
+      **Phase 2: Design**
       1. Search for relevant files and understand the existing code
       2. Identify what needs to change
       3. Design your implementation approach
-      4. **Include ASCII art or Mermaid diagrams** to visualize architecture
-      5. Define verification criteria (tests to run, behavior to check)
+      4. **Include Mermaid diagrams** to visualize architecture
 
       When done:
       - Save plan with workflow_set_plan()
-      - Update summary: workflow_set_artifact("summary", {goal, status, completed, current, remaining})
+      - Update summary artifact
       - Call workflow_next() and STOP AND WAIT for user approval.
 
   - name: criteria

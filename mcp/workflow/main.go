@@ -308,7 +308,7 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_set_pr",
-						"description": "Set the PR number for tracking. Used by the review step to monitor comments.",
+						"description": "Set the PR details for tracking. Used by the review step to monitor comments.",
 						"inputSchema": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -318,10 +318,14 @@ func handleRequest(req Request) Response {
 								},
 								"pr_url": map[string]any{
 									"type":        "string",
-									"description": "The pull request URL (optional)",
+									"description": "The pull request URL",
+								},
+								"branch": map[string]any{
+									"type":        "string",
+									"description": "The branch name (e.g., feature/todo-app)",
 								},
 							},
-							"required": []string{"pr_number"},
+							"required": []string{"pr_number", "pr_url", "branch"},
 						},
 					},
 					{
@@ -424,7 +428,11 @@ func handleToolCall(name string, args map[string]any) string {
 		if u, ok := args["pr_url"].(string); ok {
 			prURL = u
 		}
-		return workflowSetPR(prNumber, prURL)
+		branch := ""
+		if b, ok := args["branch"].(string); ok {
+			branch = b
+		}
+		return workflowSetPR(prNumber, prURL, branch)
 	case "workflow_check_pr":
 		commentCount := 0
 		if c, ok := args["comment_count"].(float64); ok {
@@ -943,7 +951,7 @@ func workflowSetArtifact(artifactType string, content any) string {
 	return string(output)
 }
 
-func workflowSetPR(prNumber int, prURL string) string {
+func workflowSetPR(prNumber int, prURL string, branch string) string {
 	if state == nil {
 		return `{"error": "no workflow initialized"}`
 	}
@@ -957,6 +965,7 @@ func workflowSetPR(prNumber int, prURL string) string {
 	prArtifact := map[string]any{
 		"number": prNumber,
 		"url":    prURL,
+		"branch": branch,
 	}
 	if state.Artifacts == nil {
 		state.Artifacts = make(map[string]Artifact)
@@ -983,6 +992,7 @@ func workflowSetPR(prNumber int, prURL string) string {
 		"pr_set":    true,
 		"pr_number": prNumber,
 		"pr_url":    prURL,
+		"branch":    branch,
 		"event":     event,
 	}, "", "  ")
 	return string(output)

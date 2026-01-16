@@ -51,7 +51,7 @@ steps:
 - `workflow_set_artifact(type, content)` - Store any artifact (plan, criteria, test_results, etc.)
 - `workflow_set_plan(plan)` - Store the implementation plan (shorthand for set_artifact)
 - `workflow_set_criteria(criteria[])` - Set verification criteria (shorthand for set_artifact)
-- `workflow_set_pr(pr_number, pr_url)` - Set PR number for tracking in review step
+- `workflow_set_pr(pr_number, pr_url, branch)` - Set PR details for tracking
 - `workflow_check_pr(comment_count)` - Check for new PR comments, returns suggested action
 - `workflow_step(step, status)` - Update a specific step's status
 - `workflow_blocked(reason)` - Mark as blocked by external dependency
@@ -102,20 +102,23 @@ The approval flow works as follows:
 
 When in the **plan** step:
 
+**Phase 1: Clarify (if needed)**
+- Review the task requirements
+- If anything is ambiguous or unclear, **ask clarifying questions first**
+- Wait for answers before proceeding to design
+- Skip this if requirements are clear
+
+**Phase 2: Design**
 1. Explore the codebase thoroughly using available tools
 2. Design your implementation approach
 3. **Include Mermaid diagrams** to visualize:
    - System architecture
    - Data flow
    - Component relationships
-   - Before/after states
-4. Present the complete plan to the user in a clear, structured format
-5. **Call `workflow_set_plan(plan)` to store the COMPLETE plan** - save the full plan with all diagrams, options, details, and explanations. Do NOT summarize. But do NOT include exploration noise (tool outputs, file listings, grep results, "Running: find..." etc). Only the clean, presentable plan content.
+4. Present the complete plan to the user
+5. **Call `workflow_set_plan(plan)`** - save the full plan (no tool output noise)
 6. Call `workflow_next()` to request approval
-7. **STOP AND WAIT** for the user to respond with either:
-   - `/workflow-approve` - Proceed to criteria step
-   - `/workflow-iterate <feedback>` - Revise the plan based on feedback
-8. If user provides iteration feedback, revise the plan, update with `workflow_set_plan()` (full plan again), and repeat
+7. **STOP AND WAIT** for user response
 
 **DO NOT proceed to the criteria step until the user explicitly approves the plan.**
 
@@ -180,8 +183,8 @@ When in the **criteria** step:
 When in the **pr** step:
 
 1. Create PR with `gh pr create` (include summary and test plan)
-2. Extract PR number and URL from output
-3. Call `workflow_set_pr(pr_number, pr_url)` to track
+2. Extract PR number, URL, and branch from output
+3. Call `workflow_set_pr(pr_number, pr_url, branch)` to track
 4. **Show the PR link to user**: "PR created: <url>"
 5. Update summary artifact
 6. Call `workflow_next()` to start review monitoring
