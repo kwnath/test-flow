@@ -73,7 +73,7 @@ steps:
 4. **verify** (allows iteration) - Run tests, check all criteria pass
 5. **pr** - Create pull request, track with `workflow_set_pr()`
 6. **review** (auto-loops) - Monitor PR comments, address feedback
-7. **human_review** (requires approval) - Final human approval before merge
+7. **human_review** (requires approval) - Notify user PR is ready for their review
 8. **complete** - Summarize accomplishments
 
 ### Approval Flow
@@ -179,10 +179,12 @@ When in the **criteria** step:
 
 When in the **pr** step:
 
-1. Create a descriptive pull request using `gh pr create`
-2. Extract the PR number from the output
-3. Call `workflow_set_pr(pr_number, pr_url)` to track the PR
-4. Call `workflow_next()` to move to the review step
+1. Create PR with `gh pr create` (include summary and test plan)
+2. Extract PR number and URL from output
+3. Call `workflow_set_pr(pr_number, pr_url)` to track
+4. **Show the PR link to user**: "PR created: <url>"
+5. Update summary artifact
+6. Call `workflow_next()` to start review monitoring
 
 ### Review Step Instructions
 
@@ -201,11 +203,14 @@ When in the **review** step, **loop continuously**:
 
 When in the **human_review** step:
 
-1. Present PR status (link, comments addressed)
-2. Call `workflow_next()` to request approval
-3. **STOP AND WAIT** for human to approve merge
+1. Present PR to user:
+   - PR link
+   - Summary of what was implemented
+   - Any comments that were addressed
+2. Call `workflow_next()` to notify user
+3. **STOP AND WAIT** for user to review
 
-Human says "approved" / "merge it" → `workflow_approve()` → complete
+This is a "PR is ready for your eyes" notification. User reviews and says "looks good" → complete.
 
 ### Verification Criteria Format
 

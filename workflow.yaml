@@ -72,9 +72,12 @@ steps:
     allows_iteration: false
     instructions: |
       Create a pull request:
-      1. Create a descriptive PR with summary and test plan
-      2. Call workflow_set_pr(pr_number, pr_url) to track the PR
-      3. Call workflow_next() to move to review step
+      1. Create PR with `gh pr create` (include summary and test plan)
+      2. Extract PR number and URL from output
+      3. Call workflow_set_pr(pr_number, pr_url) to track
+      4. **Show the PR link to user** so they can see it
+      5. Update summary artifact
+      6. Call workflow_next() to start review monitoring
 
   - name: review
     needs_approval: false
@@ -94,15 +97,15 @@ steps:
     needs_approval: true
     allows_iteration: false
     approval_prompt: |
-      PR has been reviewed and all comments addressed.
-      Ready to merge? Say "approved" or "merge it"
+      PR is ready for your review. All automated checks passed.
+      Take a look and say "looks good" when ready to complete.
     instructions: |
-      Present PR status to user:
+      Notify user the PR is ready for their review:
       - Show PR link
-      - Confirm all review comments addressed
-      - Wait for human approval to merge
+      - Summarize what was implemented
+      - Note any comments that were addressed
 
-      STOP AND WAIT for user approval.
+      STOP AND WAIT for user to review and approve.
 
   - name: complete
     needs_approval: false
