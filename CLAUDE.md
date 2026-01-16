@@ -199,12 +199,29 @@ State includes:
 - `waiting_for_approval` - Whether step is awaiting approval
 - `pr_number`, `last_comment_check`, `last_comment_count` - PR tracking for review step
 
+### Summary Artifact
+
+**Keep a running summary of goal progress** using `workflow_set_artifact("summary", ...)`:
+
+```json
+{
+  "goal": "Original task description",
+  "status": "in_progress",
+  "completed": ["What's been done..."],
+  "current": "What's happening now",
+  "remaining": ["What's left to do"]
+}
+```
+
+**Update the summary at each step transition** - after completing plan, criteria, execute, verify, etc. This helps external apps show users the big picture.
+
 ### Best Practices
 
 1. Always start tasks with `/workflow-start`
 2. **Include diagrams** (ASCII art or Mermaid) in plans
 3. Set verification criteria during planning
-4. **STOP AND WAIT** at approval gates - never auto-proceed
-5. Use `workflow_blocked` only for external dependencies (not approval gates)
-6. Verify all criteria before creating PR
-7. Emit structured events for external parsing
+4. **Update summary artifact** at each step transition
+5. **STOP AND WAIT** at approval gates - never auto-proceed
+6. Use `workflow_blocked` only for external dependencies (not approval gates)
+7. Verify all criteria before creating PR
+8. Emit structured events for external parsing

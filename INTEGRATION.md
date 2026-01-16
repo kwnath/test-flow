@@ -97,8 +97,65 @@ Access artifacts by type:
 - `artifacts.plan.content` - The implementation plan (string, markdown)
 - `artifacts.criteria.content` - Verification criteria (array of strings)
 - `artifacts.pr.content` - PR info (object with `number` and `url`)
+- `artifacts.summary.content` - Goal progress summary (see below)
 
 Artifacts are extensible - new types can be added without code changes.
+
+## Goal Summary
+
+The `summary` artifact tracks progress toward the original goal:
+
+```json
+{
+  "artifacts": {
+    "summary": {
+      "type": "summary",
+      "content": {
+        "goal": "Add user authentication to the app",
+        "status": "in_progress",
+        "completed": [
+          "Designed JWT-based auth architecture",
+          "Defined 5 verification criteria",
+          "Implemented login/logout endpoints"
+        ],
+        "current": "Running tests to verify implementation",
+        "remaining": [
+          "Create PR",
+          "Address review feedback"
+        ]
+      },
+      "step": "verify",
+      "updated_at": "2025-01-16T12:30:00Z"
+    }
+  }
+}
+```
+
+### Summary Fields
+
+| Field | Description | UI Suggestion |
+|-------|-------------|---------------|
+| `goal` | Original task | Show at top |
+| `status` | `in_progress`, `blocked`, `completed` | Status badge |
+| `completed` | What's been done | Checklist with ✓ |
+| `current` | What's happening now | Highlighted/animated |
+| `remaining` | What's left | Dimmed checklist |
+
+### Display Example
+
+```
+┌─────────────────────────────────────────────────┐
+│ 🎯 Add user authentication to the app           │
+│ Status: In Progress (4/7 steps)                 │
+├─────────────────────────────────────────────────┤
+│ ✓ Designed JWT-based auth architecture          │
+│ ✓ Defined 5 verification criteria               │
+│ ✓ Implemented login/logout endpoints            │
+│ ● Running tests to verify implementation        │
+│ ○ Create PR                                     │
+│ ○ Address review feedback                       │
+└─────────────────────────────────────────────────┘
+```
 
 ## Step Statuses
 

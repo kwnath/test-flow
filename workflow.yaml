@@ -20,8 +20,10 @@ steps:
       4. **Include ASCII art or Mermaid diagrams** to visualize architecture
       5. Define verification criteria (tests to run, behavior to check)
 
-      When done, present your plan and call workflow_next().
-      Then STOP AND WAIT for user approval.
+      When done:
+      - Save plan with workflow_set_plan()
+      - Update summary: workflow_set_artifact("summary", {goal, status, completed, current, remaining})
+      - Call workflow_next() and STOP AND WAIT for user approval.
 
   - name: criteria
     needs_approval: true
@@ -36,8 +38,10 @@ steps:
       2. Include tests to run, behavior to check, edge cases
       3. Use workflow_set_criteria to record the criteria
 
-      When done, present criteria and call workflow_next().
-      Then STOP AND WAIT for user approval.
+      When done:
+      - Save criteria with workflow_set_criteria()
+      - Update summary artifact with progress
+      - Call workflow_next() and STOP AND WAIT for user approval.
 
   - name: execute
     needs_approval: false
@@ -49,7 +53,7 @@ steps:
       3. Keep changes focused and minimal
       4. Don't introduce unrelated changes
 
-      Move to verify when implementation is complete.
+      When done, update summary artifact and move to verify.
 
   - name: verify
     needs_approval: false
@@ -60,7 +64,7 @@ steps:
       2. Confirm each criterion passes
       3. Fix any issues found
 
-      Only proceed when ALL criteria pass.
+      When ALL criteria pass, update summary artifact and proceed.
 
   - name: pr
     needs_approval: false
