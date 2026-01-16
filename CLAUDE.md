@@ -160,12 +160,17 @@ Step-by-step implementation order.
 
 When in the **criteria** step:
 
-1. Based on the approved plan, define **high-level acceptance criteria**
-2. Keep to **5-8 items max** - each a meaningful check, not a test case
-3. Use `workflow_set_criteria()` to record the criteria
-4. Present criteria to the user for review
-5. Call `workflow_next()` to request approval
-6. **STOP AND WAIT** for user approval or iteration feedback
+1. **Gather context first** - read relevant files to inform criteria:
+   - README.md, CONTRIBUTING.md, docs/
+   - Existing tests (to match testing patterns)
+   - Related code (to understand expected behavior)
+   - package.json scripts, CI config
+2. Based on plan + context, define **high-level acceptance criteria**
+3. Keep to **5-8 items max** - each a meaningful check, not a test case
+4. Use `workflow_set_criteria()` to record the criteria
+5. Present criteria to the user for review
+6. Call `workflow_next()` to request approval
+7. **STOP AND WAIT** for user approval or iteration feedback
 
 **DO NOT proceed to execute until the user explicitly approves the criteria.**
 

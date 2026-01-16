@@ -33,10 +33,11 @@ steps:
       - /workflow-approve to proceed to implementation
       - /workflow-iterate <feedback> to adjust criteria
     instructions: |
-      Define specific, measurable completion criteria:
-      1. Based on the approved plan, list what must be verified
-      2. Include tests to run, behavior to check, edge cases
-      3. Use workflow_set_criteria to record the criteria
+      Define verification criteria based on project context:
+      1. Read relevant files first (README, docs, tests, related code)
+      2. Based on plan + context, define acceptance criteria
+      3. Keep to 5-8 high-level checks (not granular test cases)
+      4. Use markdown checkboxes: "- [ ] Criteria item"
 
       When done:
       - Save criteria with workflow_set_criteria()
