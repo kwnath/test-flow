@@ -53,8 +53,6 @@ steps:
 - `workflow_set_criteria(criteria[])` - Set verification criteria (shorthand for set_artifact)
 - `workflow_set_pr(pr_number, pr_url, branch)` - Set PR details for tracking
 - `workflow_check_pr(comment_count)` - Check for new PR comments, returns suggested action
-- `workflow_add_criteria(criteria[])` - Append criteria from any step (flexible)
-- `workflow_goto(step)` - Jump to any step without resetting
 - `workflow_step(step, status)` - Update a specific step's status
 - `workflow_blocked(reason)` - Mark as blocked by external dependency
 
@@ -99,28 +97,6 @@ The approval flow works as follows:
 6. Repeat until approved
 
 **DO NOT auto-proceed through approval gates. Always wait for user response.**
-
-### Flexible Navigation
-
-The workflow is **not strictly linear**. You can:
-
-- **Add criteria anytime**: `workflow_add_criteria()` appends from any step
-- **Jump to any step**: `workflow_goto(step)` moves without resetting
-- **Modify artifacts**: Update plan, criteria, summary from anywhere
-
-Example: User asks to add a criterion during review:
-```
-User: "Also make sure there are no console.logs"
-→ workflow_add_criteria(["- [ ] No console.log statements"])
-→ Continue with current step
-```
-
-Example: User wants to go back and revise the plan:
-```
-User: "Actually, let's change the approach"
-→ workflow_goto("plan")
-→ Revise plan, then continue forward
-```
 
 ### Plan Step Instructions
 
