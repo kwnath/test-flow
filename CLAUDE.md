@@ -266,19 +266,20 @@ State includes:
 
 ### Summary Artifact
 
-**Keep a running summary of goal progress** using `workflow_set_artifact("summary", ...)`:
+**Keep a short status summary** using `workflow_set_artifact("summary", ...)`:
 
-```json
-{
-  "goal": "Original task description",
-  "status": "in_progress",
-  "completed": ["What's been done..."],
-  "current": "What's happening now",
-  "remaining": ["What's left to do"]
-}
+```
+• Goal: Build a CLI todo app with add/list/done/remove commands
+• Progress: Executing implementation (step 3/7)
+• Last: Defined 5 verification criteria
 ```
 
-**Update the summary at each step transition** - after completing plan, criteria, execute, verify, etc. This helps external apps show users the big picture.
+Just 3 bullet points:
+- **Goal** - Original task (one line)
+- **Progress** - Current step and position
+- **Last** - What was just completed
+
+**Update at each step transition.** Keep it brief - this is a status line, not a detailed log.
 
 ### Best Practices
 

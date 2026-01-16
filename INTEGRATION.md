@@ -132,27 +132,14 @@ Display example:
 
 ## Goal Summary
 
-The `summary` artifact tracks progress toward the original goal:
+The `summary` artifact is a **short 3-line status update**:
 
 ```json
 {
   "artifacts": {
     "summary": {
       "type": "summary",
-      "content": {
-        "goal": "Add user authentication to the app",
-        "status": "in_progress",
-        "completed": [
-          "Designed JWT-based auth architecture",
-          "Defined 5 verification criteria",
-          "Implemented login/logout endpoints"
-        ],
-        "current": "Running tests to verify implementation",
-        "remaining": [
-          "Create PR",
-          "Address review feedback"
-        ]
-      },
+      "content": "• Goal: Add user authentication to the app\n• Progress: Verify (step 4/7)\n• Last: Implemented login/logout endpoints",
       "step": "verify",
       "updated_at": "2025-01-16T12:30:00Z"
     }
@@ -160,29 +147,20 @@ The `summary` artifact tracks progress toward the original goal:
 }
 ```
 
-### Summary Fields
+### Summary Format
 
-| Field | Description | UI Suggestion |
-|-------|-------------|---------------|
-| `goal` | Original task | Show at top |
-| `status` | `in_progress`, `blocked`, `completed` | Status badge |
-| `completed` | What's been done | Checklist with ✓ |
-| `current` | What's happening now | Highlighted/animated |
-| `remaining` | What's left | Dimmed checklist |
+Just 3 bullet points:
+- **Goal** - Original task (one line)
+- **Progress** - Current step and position
+- **Last** - What was just completed
 
 ### Display Example
 
 ```
 ┌─────────────────────────────────────────────────┐
-│ 🎯 Add user authentication to the app           │
-│ Status: In Progress (4/7 steps)                 │
-├─────────────────────────────────────────────────┤
-│ ✓ Designed JWT-based auth architecture          │
-│ ✓ Defined 5 verification criteria               │
-│ ✓ Implemented login/logout endpoints            │
-│ ● Running tests to verify implementation        │
-│ ○ Create PR                                     │
-│ ○ Address review feedback                       │
+│ • Goal: Add user authentication to the app      │
+│ • Progress: Verify (step 4/7)                   │
+│ • Last: Implemented login/logout endpoints      │
 └─────────────────────────────────────────────────┘
 ```
 
