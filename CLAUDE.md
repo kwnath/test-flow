@@ -24,10 +24,11 @@ steps:
 ### Available Tools
 
 - `workflow_init(task)` - Initialize workflow, returns first step instructions
-- `workflow_status()` - Get current state, progress, and instructions
+- `workflow_status()` - Get current state, progress, plan, and instructions
 - `workflow_next()` - Request to proceed. If step requires approval, sets `awaiting_approval` status
 - `workflow_approve()` - Approve current step and move to next (only when `awaiting_approval`)
 - `workflow_iterate(feedback)` - Provide feedback and iterate on current step
+- `workflow_set_plan(plan)` - Store the implementation/design plan for display
 - `workflow_set_criteria(criteria[])` - Set verification criteria
 - `workflow_step(step, status)` - Update a specific step's status
 - `workflow_blocked(reason)` - Mark as blocked by external dependency
@@ -79,11 +80,12 @@ When in the **plan** step:
    - Component relationships
    - Before/after states
 4. Present the complete plan to the user in a clear, structured format
-5. Call `workflow_next()` to request approval
-6. **STOP AND WAIT** for the user to respond with either:
+5. **Call `workflow_set_plan(plan)` to store the plan** for display and reference
+6. Call `workflow_next()` to request approval
+7. **STOP AND WAIT** for the user to respond with either:
    - `/workflow-approve` - Proceed to criteria step
    - `/workflow-iterate <feedback>` - Revise the plan based on feedback
-7. If user provides iteration feedback, revise the plan and repeat from step 4
+8. If user provides iteration feedback, revise the plan, update with `workflow_set_plan()`, and repeat
 
 **DO NOT proceed to the criteria step until the user explicitly approves the plan.**
 

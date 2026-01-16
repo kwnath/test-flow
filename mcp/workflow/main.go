@@ -60,6 +60,7 @@ type WorkflowState struct {
 	CurrentStep          string         `json:"current_step"`
 	Steps                []WorkflowStep `json:"steps"`
 	WaitingForApproval   bool           `json:"waiting_for_approval"`
+	ImplementationPlan   string         `json:"implementation_plan,omitempty"`
 	VerificationCriteria []string       `json:"verification_criteria,omitempty"`
 	IterationCount       int            `json:"iteration_count"`
 	IterationFeedback    []string       `json:"iteration_feedback,omitempty"`
@@ -274,6 +275,20 @@ func handleRequest(req Request) Response {
 							"required": []string{"criteria"},
 						},
 					},
+					{
+						"name":        "workflow_set_plan",
+						"description": "Set the implementation/design plan. Store the plan so it can be displayed and referenced.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"plan": map[string]any{
+									"type":        "string",
+									"description": "The implementation or design plan (can include markdown, diagrams, etc.)",
+								},
+							},
+							"required": []string{"plan"},
+						},
+					},
 				},
 			},
 		}
@@ -338,6 +353,12 @@ func handleToolCall(name string, args map[string]any) string {
 			}
 		}
 		return workflowSetCriteria(criteria)
+	case "workflow_set_plan":
+		plan := ""
+		if p, ok := args["plan"].(string); ok {
+			plan = p
+		}
+		return workflowSetPlan(plan)
 	default:
 		return `{"error": "unknown tool"}`
 	}
@@ -443,6 +464,7 @@ func workflowStatus() string {
 		"task":                  state.Task,
 		"current_step":          state.CurrentStep,
 		"waiting_for_approval":  state.WaitingForApproval,
+		"implementation_plan":   state.ImplementationPlan,
 		"verification_criteria": state.VerificationCriteria,
 		"iteration_count":       state.IterationCount,
 		"iteration_feedback":    state.IterationFeedback,
@@ -809,6 +831,32 @@ func workflowSetCriteria(criteria []string) string {
 		"criteria_set": true,
 		"criteria":     criteria,
 		"event":        event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowSetPlan(plan string) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	state.ImplementationPlan = plan
+	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	saveState()
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "plan_set",
+		WorkflowID: state.ID,
+		Step:       state.CurrentStep,
+		Message:    "Implementation plan has been set",
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"plan_set": true,
+		"plan":     plan,
+		"event":    event,
 	}, "", "  ")
 	return string(output)
 }
