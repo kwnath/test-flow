@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+## IMPORTANT: Always Use Workflow
+
+**When the user asks you to build, create, or implement anything, IMMEDIATELY call `workflow_init(task)` to start the workflow.** Do not ask clarifying questions first. Start the workflow, then explore and plan.
+
+Example:
+- User: "Create a todo app"
+- You: Call `workflow_init("Create a todo app")` FIRST, then begin the plan step
+
+**Do NOT:**
+- Ask "What kind of todo app?" before starting
+- Wait for the user to say `/workflow-start`
+- Skip the workflow for implementation tasks
+
 ## Dynamic Workflow System
 
 This project uses a configurable workflow system for structured task management. Workflows are defined in YAML and support approval gates for human checkpoints.
