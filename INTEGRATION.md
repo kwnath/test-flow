@@ -132,14 +132,14 @@ Display example:
 
 ## Goal Summary
 
-The `summary` artifact is a **short 3-line status update**:
+The `summary` artifact provides **context-rich status** for anyone picking up the project:
 
 ```json
 {
   "artifacts": {
     "summary": {
       "type": "summary",
-      "content": "• Goal: Add user authentication to the app\n• Progress: Verify (step 4/7)\n• Last: Implemented login/logout endpoints",
+      "content": "**Goal:** Add user authentication\n\n**Context:** JWT-based auth with refresh tokens, storing sessions in Redis\n\n**Done:**\n- Designed auth flow with middleware\n- Implemented login/logout endpoints\n- Added token refresh logic\n\n**Now:** Verifying implementation (step 4/7)\n\n**Next:** Create PR",
       "step": "verify",
       "updated_at": "2025-01-16T12:30:00Z"
     }
@@ -147,20 +147,34 @@ The `summary` artifact is a **short 3-line status update**:
 }
 ```
 
-### Summary Format
+### Summary Fields
 
-Just 3 bullet points:
-- **Goal** - Original task (one line)
-- **Progress** - Current step and position
-- **Last** - What was just completed
+| Field | Description |
+|-------|-------------|
+| **Goal** | Original task |
+| **Context** | What it is (tech, approach) |
+| **Done** | Brief list of completed work |
+| **Now** | Current step and position |
+| **Next** | What comes after |
 
 ### Display Example
 
+Render `content` as markdown:
+
 ```
 ┌─────────────────────────────────────────────────┐
-│ • Goal: Add user authentication to the app      │
-│ • Progress: Verify (step 4/7)                   │
-│ • Last: Implemented login/logout endpoints      │
+│ Goal: Add user authentication                   │
+│                                                 │
+│ Context: JWT-based auth with refresh tokens,    │
+│ storing sessions in Redis                       │
+│                                                 │
+│ Done:                                           │
+│ • Designed auth flow with middleware            │
+│ • Implemented login/logout endpoints            │
+│ • Added token refresh logic                     │
+│                                                 │
+│ Now: Verifying implementation (step 4/7)        │
+│ Next: Create PR                                 │
 └─────────────────────────────────────────────────┘
 ```
 

@@ -266,20 +266,33 @@ State includes:
 
 ### Summary Artifact
 
-**Keep a short status summary** using `workflow_set_artifact("summary", ...)`:
+**Keep a context-rich summary** so anyone can pick up the project:
 
+```markdown
+**Goal:** Build a CLI todo app with add/list/done/remove commands
+
+**Context:** Node.js CLI storing todos in JSON file with auto-incrementing IDs
+
+**Done:**
+- Designed: CLI → Parser → TodoService → JSON storage
+- Implemented: add, list, done, remove commands
+- Added: input validation and error messages
+
+**Now:** Verifying all criteria (step 4/7)
+
+**Next:** Create PR
 ```
-• Goal: Build a CLI todo app with add/list/done/remove commands
-• Progress: Executing implementation (step 3/7)
-• Last: Defined 5 verification criteria
-```
 
-Just 3 bullet points:
-- **Goal** - Original task (one line)
-- **Progress** - Current step and position
-- **Last** - What was just completed
+Store as markdown string via `workflow_set_artifact("summary", content)`.
 
-**Update at each step transition.** Keep it brief - this is a status line, not a detailed log.
+**Fields:**
+- **Goal** - Original task
+- **Context** - What it is (tech, approach)
+- **Done** - Brief list of completed work
+- **Now** - Current step and position
+- **Next** - What comes after
+
+**Update at each step transition.** Include enough context for someone with no prior knowledge to pick up the project.
 
 ### Best Practices
 
