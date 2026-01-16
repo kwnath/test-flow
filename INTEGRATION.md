@@ -28,7 +28,11 @@ Poll or watch `~/state/workflow_state.json` for the current state:
     },
     "criteria": {
       "type": "criteria",
-      "content": ["Tests pass", "No errors"],
+      "content": [
+        "- [x] All CRUD operations work",
+        "- [x] Error handling for invalid inputs",
+        "- [ ] Documentation complete"
+      ],
       "step": "criteria",
       "created_at": "2025-01-15T12:05:00Z"
     },
@@ -72,7 +76,7 @@ Poll or watch `~/state/workflow_state.json` for the current state:
 | `current_step` | Active step name | Always |
 | `waiting_for_approval` | Whether human input needed | Always |
 | `artifacts.plan.content` | The design/plan (markdown) | When set |
-| `artifacts.criteria.content` | List of things to verify | When set |
+| `artifacts.criteria.content` | Checklist with `- [ ]` / `- [x]` | When set |
 | `artifacts.pr.content` | PR number and URL | During PR/review |
 | `iteration_count` | How many revisions | During approval |
 | `iteration_feedback` | All feedback given | During approval |
@@ -95,11 +99,36 @@ interface Artifact {
 
 Access artifacts by type:
 - `artifacts.plan.content` - The implementation plan (string, markdown)
-- `artifacts.criteria.content` - Verification criteria (array of strings)
+- `artifacts.criteria.content` - Verification checklist (array of `- [ ]` / `- [x]` strings)
 - `artifacts.pr.content` - PR info (object with `number` and `url`)
 - `artifacts.summary.content` - Goal progress summary (see below)
 
 Artifacts are extensible - new types can be added without code changes.
+
+### Rendering Criteria Checklist
+
+Criteria items use markdown checkbox format. Render as interactive checkboxes:
+
+```typescript
+// Parse criteria items
+const criteria = artifacts.criteria?.content || [];
+// ["- [x] All CRUD operations work", "- [ ] Docs complete"]
+
+// Render each item
+criteria.map(item => {
+  const checked = item.includes('[x]');
+  const text = item.replace(/^- \[.\] /, '');
+  return { checked, text };
+});
+// [{checked: true, text: "All CRUD operations work"}, ...]
+```
+
+Display example:
+```
+☑ All CRUD operations work
+☑ Error handling for invalid inputs
+☐ Documentation complete
+```
 
 ## Goal Summary
 

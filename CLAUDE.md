@@ -194,36 +194,46 @@ When in the **review** step:
 
 ### Verification Criteria Format
 
-Criteria should be **high-level acceptance checks** - things you can verify work, not granular test cases.
+Criteria should be **high-level acceptance checks** formatted as a **markdown checklist**:
 
-**GOOD** (high-level checklist):
+**GOOD** (high-level checklist with checkboxes):
 ```
 workflow_set_criteria([
-  "All CRUD operations work correctly",
-  "Invalid inputs show appropriate errors",
-  "Help/usage displays when needed",
-  "No crashes or unhandled exceptions",
-  "Documentation covers all features"
+  "- [ ] All CRUD operations work correctly",
+  "- [ ] Invalid inputs show appropriate errors",
+  "- [ ] Help/usage displays when needed",
+  "- [ ] No crashes or unhandled exceptions",
+  "- [ ] Documentation covers all features"
 ])
 ```
 
 **BAD** (too granular - reads like unit tests):
 ```
 workflow_set_criteria([
-  "node app.js add 'Task' creates task",
-  "node app.js add '' shows error",
-  "node app.js list shows tasks",
-  "node app.js done 1 marks complete",
-  "node app.js done 999 shows error",
+  "- [ ] node app.js add 'Task' creates task",
+  "- [ ] node app.js add '' shows error",
+  "- [ ] node app.js list shows tasks",
+  "- [ ] node app.js done 1 marks complete",
   // ... 10+ more detailed cases
+])
+```
+
+**During verify step**, mark items complete as you verify them:
+```
+workflow_set_criteria([
+  "- [x] All CRUD operations work correctly",
+  "- [x] Invalid inputs show appropriate errors",
+  "- [ ] Help/usage displays when needed",  // in progress
+  "- [ ] No crashes or unhandled exceptions",
+  "- [ ] Documentation covers all features"
 ])
 ```
 
 **Guidelines:**
 - **5-8 items max** - group related checks
+- **Use `- [ ]` format** - renders as checkboxes
+- **Mark `- [x]` when verified** - shows progress
 - **Acceptance-level** - "feature works" not "specific command works"
-- **Verifiable** - something you can demonstrate
-- **Well-formatted** - clean markdown checklist
 
 ### Event Output
 
