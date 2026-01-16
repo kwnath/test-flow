@@ -46,8 +46,9 @@ When executing the **plan** step:
    - Component relationships
    - Before/after states
 4. Present the complete plan to the user in a clear, structured format
-5. Call `workflow_next()` to request approval
-6. **STOP AND WAIT** - Do not proceed until user approves or provides iteration feedback
+5. **Call `workflow_set_plan(plan)` with the COMPLETE plan** - include EVERYTHING you presented: all diagrams, all options, all details, all explanations. Do NOT summarize. External apps display this to users.
+6. Call `workflow_next()` to request approval
+7. **STOP AND WAIT** - Do not proceed until user approves or provides iteration feedback
 
 The user will respond with:
 - `/workflow-approve` - Approved, move to criteria

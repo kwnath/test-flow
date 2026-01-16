@@ -80,14 +80,16 @@ When in the **plan** step:
    - Component relationships
    - Before/after states
 4. Present the complete plan to the user in a clear, structured format
-5. **Call `workflow_set_plan(plan)` to store the plan** for display and reference
+5. **Call `workflow_set_plan(plan)` to store the COMPLETE plan** - save the ENTIRE plan exactly as you presented it to the user, including all diagrams, options, details, and explanations. Do NOT summarize or condense it.
 6. Call `workflow_next()` to request approval
 7. **STOP AND WAIT** for the user to respond with either:
    - `/workflow-approve` - Proceed to criteria step
    - `/workflow-iterate <feedback>` - Revise the plan based on feedback
-8. If user provides iteration feedback, revise the plan, update with `workflow_set_plan()`, and repeat
+8. If user provides iteration feedback, revise the plan, update with `workflow_set_plan()` (full plan again), and repeat
 
 **DO NOT proceed to the criteria step until the user explicitly approves the plan.**
+
+**IMPORTANT: The plan saved via `workflow_set_plan()` must be the COMPLETE plan, not a summary. External apps display this plan to users, so it must contain all details, diagrams, options, and explanations.**
 
 ### Criteria Step Instructions
 
