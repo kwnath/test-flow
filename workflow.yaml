@@ -77,21 +77,18 @@ steps:
       3. Call workflow_next() to move to review step
 
   - name: review
-    needs_approval: true
+    needs_approval: false
     allows_iteration: true
-    approval_prompt: |
-      PR review complete. Ready to merge?
-      - /workflow-approve to complete the workflow
-      - /workflow-iterate <feedback> to request more changes
     instructions: |
-      Monitor PR for review comments:
-      1. Run `gh pr view <pr_number> --comments` to get comment count
+      Monitor PR for review comments in a loop:
+      1. Run `gh pr view <pr_number> --comments --json comments` to get comments
       2. Call workflow_check_pr(comment_count) to check status
-      3. If action is "address_comments" - address the feedback
-      4. If action is "wait" - wait the suggested time, then check again
-      5. If action is "ready_for_approval" - call workflow_next()
+      3. Based on action:
+         - "address_comments" → address feedback, update summary, loop back to 1
+         - "wait" → wait 1 minute, loop back to 1
+         - "ready_for_approval" → call workflow_next() to complete
 
-      STOP AND WAIT for user approval after calling workflow_next().
+      Keep looping until no new comments for 1 minute, then auto-proceed.
 
   - name: complete
     needs_approval: false

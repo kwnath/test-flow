@@ -110,7 +110,6 @@ var configFile string
 var defaultApprovalPrompts = map[string]string{
 	"plan":     "Review the implementation plan. Does this approach look correct? You can approve with /workflow-approve or request changes with /workflow-iterate <feedback>",
 	"criteria": "Review the completion criteria. Are these the right things to verify? Approve with /workflow-approve or iterate with /workflow-iterate <feedback>",
-	"review":   "PR review complete. Ready to merge? Approve with /workflow-approve to finish, or /workflow-iterate <feedback> for more changes.",
 }
 
 func main() {
@@ -150,7 +149,7 @@ func loadConfig() {
 			{Name: "execute", NeedsApproval: false, AllowsIteration: true, Instructions: "Implement the changes."},
 			{Name: "verify", NeedsApproval: false, AllowsIteration: true, Instructions: "Run tests and verify all criteria pass."},
 			{Name: "pr", NeedsApproval: false, AllowsIteration: false, Instructions: "Create a pull request."},
-			{Name: "review", NeedsApproval: true, AllowsIteration: true, ApprovalPrompt: defaultApprovalPrompts["review"], Instructions: "Monitor PR for comments, address feedback, check every 2 mins."},
+			{Name: "review", NeedsApproval: false, AllowsIteration: true, Instructions: "Monitor PR for comments, address feedback, auto-proceed when quiet."},
 			{Name: "complete", NeedsApproval: false, AllowsIteration: false, Instructions: "Summarize accomplishments."},
 		},
 	}

@@ -72,7 +72,7 @@ steps:
 3. **execute** (allows iteration) - Implement changes
 4. **verify** (allows iteration) - Run tests, check all criteria pass
 5. **pr** - Create pull request, track with `workflow_set_pr()`
-6. **review** (requires approval, allows iteration) - Monitor PR comments, address feedback
+6. **review** (auto-loops) - Monitor PR comments, address feedback, auto-proceed when quiet
 7. **complete** - Summarize accomplishments
 
 ### Approval Flow
@@ -185,17 +185,16 @@ When in the **pr** step:
 
 ### Review Step Instructions
 
-When in the **review** step:
+When in the **review** step, **loop continuously**:
 
 1. Run `gh pr view <pr_number> --comments --json comments` to get comments
-2. Count the comments and call `workflow_check_pr(comment_count)`
-3. Based on the `action` returned:
-   - `"address_comments"` - Read and address the new comments, then check again
-   - `"wait"` - Wait the suggested seconds, then check again
-   - `"ready_for_approval"` - No new comments for 1+ minute, call `workflow_next()`
-4. After calling `workflow_next()`, **STOP AND WAIT** for user approval
+2. Call `workflow_check_pr(comment_count)`
+3. Based on `action`:
+   - `"address_comments"` → Address the feedback, update summary, loop to step 1
+   - `"wait"` → Wait 1 minute, loop to step 1
+   - `"ready_for_approval"` → Call `workflow_next()` to auto-complete
 
-**The review step polls for PR comments. If no new comments for 1 minute, it's ready for approval.**
+**No manual approval needed.** The review step auto-loops until no new comments for 1 minute, then proceeds to complete.
 
 ### Verification Criteria Format
 
