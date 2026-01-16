@@ -1,0 +1,53 @@
+# Dynamic Workflow Configuration
+# Customize steps, approval gates, and instructions for your project
+
+name: default
+description: Standard development workflow with approval gates
+
+steps:
+  - name: plan
+    needs_approval: true
+    instructions: |
+      Explore the codebase and design your approach:
+      1. Search for relevant files and understand the existing code
+      2. Identify what needs to change
+      3. Design your implementation approach
+      4. Define verification criteria (tests to run, behavior to check)
+
+      When done, present your plan and criteria to the user.
+      Use workflow_set_criteria to record what will be verified.
+
+  - name: execute
+    needs_approval: false
+    instructions: |
+      Implement the changes according to your plan:
+      1. Make the necessary code changes
+      2. Follow existing code patterns and style
+      3. Keep changes focused and minimal
+      4. Don't introduce unrelated changes
+
+      Move to verify when implementation is complete.
+
+  - name: verify
+    needs_approval: false
+    instructions: |
+      Verify all criteria are met:
+      1. Run the tests/checks defined in verification criteria
+      2. Confirm each criterion passes
+      3. Fix any issues found
+
+      Only proceed when ALL criteria pass.
+
+  - name: pr
+    needs_approval: true
+    instructions: |
+      Create a pull request:
+      1. Create a descriptive PR with summary and test plan
+      2. Present the PR to the user for review
+
+      Wait for user approval before marking complete.
+
+  - name: complete
+    needs_approval: false
+    instructions: |
+      Workflow complete. Summarize what was accomplished.

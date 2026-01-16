@@ -8,3 +8,6 @@ workflow-mcp
 # IDE
 .idea/
 .vscode/
+
+# Claude Code user config
+.claude/

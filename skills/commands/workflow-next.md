@@ -13,37 +13,59 @@ When this command is invoked:
 
 1. Call the `workflow_next` tool
 2. Announce the step transition
-3. Begin working on the next step
-
-## Example
-
-```
-User: /workflow-next
-
-You:
-Completing **plan** step and moving to **criteria**.
-
-[Call workflow_next]
-
-## Criteria Step
-
-Now I need to define completion criteria for this task.
-
-Based on my analysis, the completion criteria are:
-1. SSO login flow completes successfully
-2. All authentication tests pass
-3. No TypeScript errors
-4. Error messages are user-friendly
-
-[Call workflow_step with step: "criteria", status: "completed"]
-
-Moving to **execute** step...
-```
+3. Show the next step's instructions
+4. Begin working on the next step
 
 ## Automatic Progression
 
-After completing meaningful work in a step, you should call `/workflow-next` to progress. Don't wait to be asked.
+You should call `workflow_next` when:
+- Step work is complete (for non-approval steps)
+- User has approved (for approval steps)
 
-## Blocked State
+### Approval Detection
 
-If you cannot proceed (need human input, waiting for PR review, etc.), use `workflow_blocked` instead of `workflow_next`.
+When a step requires approval and the user says something like:
+- "looks good", "lgtm", "approved", "ship it"
+- "yes", "go ahead", "proceed", "continue"
+- Any clear positive confirmation
+
+**Do this automatically:**
+1. Call `workflow_approve` to clear the approval flag
+2. Call `workflow_next` to move to the next step
+3. Don't ask "should I proceed?" - just proceed
+
+### Example Flow
+
+**Plan step (requires approval):**
+```
+User: "looks good, proceed"
+
+[Call workflow_approve]
+[Call workflow_next]
+
+Completing **plan** step and moving to **execute**.
+
+## Execute Step
+
+Now I'll implement the changes...
+```
+
+**Execute step (no approval needed):**
+```
+[After completing implementation]
+
+Implementation complete. Moving to verification.
+
+[Call workflow_next]
+
+## Verify Step
+
+Running the verification criteria...
+```
+
+## When NOT to Use
+
+Don't use `workflow_next` when:
+- Blocked by external dependencies (use `workflow_blocked` instead)
+- Still working on current step
+- Waiting for user approval (wait for their response first)

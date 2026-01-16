@@ -13,7 +13,8 @@ When this command is invoked:
 
 1. Call the `workflow_status` tool
 2. Display the results in a clear, readable format
-3. Show progress percentage and current step
+3. Show progress, current step, and approval status
+4. Display verification criteria if set
 
 ## Example Output
 
@@ -21,18 +22,26 @@ When this command is invoked:
 ## Workflow Status
 
 **Task:** Fix authentication bug where users can't login with SSO
-**Progress:** 50% (3/6 steps complete)
+**Progress:** 40% (2/5 steps complete)
+**Current Step:** execute
+**Waiting for Approval:** No
 
-| Step | Status |
-|------|--------|
-| ✓ plan | completed |
-| ✓ criteria | completed |
-| ✓ execute | completed |
-| ► verify | in_progress |
-| ○ pr | pending |
-| ○ review | pending |
+### Verification Criteria
+- [ ] npm test passes
+- [ ] No TypeScript errors
+- [ ] Login flow works in browser
 
-**Current Step:** verify - Running tests to verify the fix
+### Steps
+| Step | Status | Approval |
+|------|--------|----------|
+| ✓ plan | completed | required |
+| ► execute | in_progress | - |
+| ○ verify | pending | - |
+| ○ pr | pending | required |
+| ○ complete | pending | - |
+
+### Current Step Instructions
+Implement the changes according to your plan...
 ```
 
 ## Status Icons
@@ -41,3 +50,15 @@ When this command is invoked:
 - `►` - in_progress
 - `○` - pending
 - `⚠` - blocked
+- `⏳` - waiting for approval
+
+## Waiting for Approval
+
+When `waiting_for_approval` is true, show this prominently:
+
+```
+**Status:** ⏳ Waiting for user approval
+
+The plan has been presented. Waiting for user to approve before proceeding.
+Say "looks good" or "approved" to continue.
+```

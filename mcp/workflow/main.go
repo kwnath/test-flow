@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // MCP JSON-RPC types
@@ -29,19 +31,36 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-// Workflow types
+// Workflow configuration (loaded from YAML)
+type WorkflowConfig struct {
+	Name        string       `yaml:"name" json:"name"`
+	Description string       `yaml:"description" json:"description"`
+	Steps       []StepConfig `yaml:"steps" json:"steps"`
+}
+
+type StepConfig struct {
+	Name          string `yaml:"name" json:"name"`
+	NeedsApproval bool   `yaml:"needs_approval" json:"needs_approval"`
+	Instructions  string `yaml:"instructions" json:"instructions"`
+}
+
+// Workflow runtime state
 type WorkflowState struct {
-	ID          string         `json:"id"`
-	Task        string         `json:"task"`
-	CurrentStep string         `json:"current_step"`
-	Steps       []WorkflowStep `json:"steps"`
-	CreatedAt   string         `json:"created_at"`
-	UpdatedAt   string         `json:"updated_at"`
+	ID                   string         `json:"id"`
+	Task                 string         `json:"task"`
+	CurrentStep          string         `json:"current_step"`
+	Steps                []WorkflowStep `json:"steps"`
+	WaitingForApproval   bool           `json:"waiting_for_approval"`
+	VerificationCriteria []string       `json:"verification_criteria,omitempty"`
+	CreatedAt            string         `json:"created_at"`
+	UpdatedAt            string         `json:"updated_at"`
 }
 
 type WorkflowStep struct {
-	Name   string `json:"name"`
-	Status string `json:"status"` // pending, in_progress, completed, blocked
+	Name          string `json:"name"`
+	Status        string `json:"status"` // pending, in_progress, completed, blocked
+	NeedsApproval bool   `json:"needs_approval"`
+	Instructions  string `json:"instructions"`
 }
 
 type WorkflowEvent struct {
@@ -56,12 +75,18 @@ type WorkflowEvent struct {
 }
 
 var state *WorkflowState
+var config *WorkflowConfig
 var stateFile string
+var configFile string
 
 func main() {
-	// Determine state file location
+	// Determine file locations
 	cwd, _ := os.Getwd()
 	stateFile = filepath.Join(cwd, "tmp", "workflow-state.json")
+	configFile = filepath.Join(cwd, "workflow.yaml")
+
+	// Load workflow configuration
+	loadConfig()
 
 	// Try to load existing state
 	loadState()
@@ -80,6 +105,30 @@ func main() {
 	}
 }
 
+func loadConfig() {
+	config = &WorkflowConfig{
+		Name:        "default",
+		Description: "Default workflow",
+		Steps: []StepConfig{
+			{Name: "plan", NeedsApproval: true, Instructions: "Explore the codebase and design your approach."},
+			{Name: "execute", NeedsApproval: false, Instructions: "Implement the changes."},
+			{Name: "verify", NeedsApproval: false, Instructions: "Run tests and verify criteria."},
+			{Name: "pr", NeedsApproval: true, Instructions: "Create a pull request."},
+			{Name: "complete", NeedsApproval: false, Instructions: "Summarize accomplishments."},
+		},
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return // Use default config
+	}
+
+	var loaded WorkflowConfig
+	if err := yaml.Unmarshal(data, &loaded); err == nil && len(loaded.Steps) > 0 {
+		config = &loaded
+	}
+}
+
 func handleRequest(req Request) Response {
 	switch req.Method {
 	case "initialize":
@@ -93,7 +142,7 @@ func handleRequest(req Request) Response {
 				},
 				"serverInfo": map[string]any{
 					"name":    "workflow-mcp",
-					"version": "1.0.0",
+					"version": "2.0.0",
 				},
 			},
 		}
@@ -106,7 +155,7 @@ func handleRequest(req Request) Response {
 				"tools": []map[string]any{
 					{
 						"name":        "workflow_init",
-						"description": "Initialize a new workflow with a task description",
+						"description": "Initialize a new workflow with a task description. Returns workflow config and first step instructions.",
 						"inputSchema": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -120,7 +169,7 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_status",
-						"description": "Get current workflow status and progress",
+						"description": "Get current workflow status, progress, and step instructions",
 						"inputSchema": map[string]any{
 							"type":       "object",
 							"properties": map[string]any{},
@@ -134,7 +183,7 @@ func handleRequest(req Request) Response {
 							"properties": map[string]any{
 								"step": map[string]any{
 									"type":        "string",
-									"description": "Step name (plan, criteria, execute, verify, pr, review)",
+									"description": "Step name",
 								},
 								"status": map[string]any{
 									"type":        "string",
@@ -146,13 +195,13 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_blocked",
-						"description": "Mark workflow as blocked, needing human intervention",
+						"description": "Mark workflow as blocked due to external dependencies (not for approval gates)",
 						"inputSchema": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
 								"reason": map[string]any{
 									"type":        "string",
-									"description": "Reason for blocking",
+									"description": "Reason for blocking (external dependency)",
 								},
 							},
 							"required": []string{"reason"},
@@ -160,10 +209,33 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_next",
-						"description": "Move to the next workflow step",
+						"description": "Complete current step and move to next. Use when step work is done or approval is given.",
 						"inputSchema": map[string]any{
 							"type":       "object",
 							"properties": map[string]any{},
+						},
+					},
+					{
+						"name":        "workflow_approve",
+						"description": "Approve the current step (clears waiting_for_approval). Call this when user gives approval.",
+						"inputSchema": map[string]any{
+							"type":       "object",
+							"properties": map[string]any{},
+						},
+					},
+					{
+						"name":        "workflow_set_criteria",
+						"description": "Set verification criteria to be checked in the verify step",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"criteria": map[string]any{
+									"type":        "array",
+									"items":       map[string]any{"type": "string"},
+									"description": "List of verification criteria (tests to run, checks to perform)",
+								},
+							},
+							"required": []string{"criteria"},
 						},
 					},
 				},
@@ -212,26 +284,48 @@ func handleToolCall(name string, args map[string]any) string {
 		return workflowBlocked(args["reason"].(string))
 	case "workflow_next":
 		return workflowNext()
+	case "workflow_approve":
+		return workflowApprove()
+	case "workflow_set_criteria":
+		criteria := []string{}
+		if c, ok := args["criteria"].([]any); ok {
+			for _, item := range c {
+				if s, ok := item.(string); ok {
+					criteria = append(criteria, s)
+				}
+			}
+		}
+		return workflowSetCriteria(criteria)
 	default:
 		return `{"error": "unknown tool"}`
 	}
 }
 
 func workflowInit(task string) string {
+	// Build steps from config
+	steps := make([]WorkflowStep, len(config.Steps))
+	for i, sc := range config.Steps {
+		status := "pending"
+		if i == 0 {
+			status = "in_progress"
+		}
+		steps[i] = WorkflowStep{
+			Name:          sc.Name,
+			Status:        status,
+			NeedsApproval: sc.NeedsApproval,
+			Instructions:  sc.Instructions,
+		}
+	}
+
+	firstStep := config.Steps[0]
 	state = &WorkflowState{
-		ID:          fmt.Sprintf("wf_%d", time.Now().UnixNano()),
-		Task:        task,
-		CurrentStep: "plan",
-		Steps: []WorkflowStep{
-			{Name: "plan", Status: "in_progress"},
-			{Name: "criteria", Status: "pending"},
-			{Name: "execute", Status: "pending"},
-			{Name: "verify", Status: "pending"},
-			{Name: "pr", Status: "pending"},
-			{Name: "review", Status: "pending"},
-		},
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		ID:                 fmt.Sprintf("wf_%d", time.Now().UnixNano()),
+		Task:               task,
+		CurrentStep:        firstStep.Name,
+		Steps:              steps,
+		WaitingForApproval: firstStep.NeedsApproval,
+		CreatedAt:          time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt:          time.Now().UTC().Format(time.RFC3339),
 	}
 	saveState()
 
@@ -239,14 +333,19 @@ func workflowInit(task string) string {
 		Event:      "workflow",
 		Type:       "init",
 		WorkflowID: state.ID,
-		Step:       "plan",
+		Step:       firstStep.Name,
 		Status:     "in_progress",
 		Timestamp:  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"workflow": state,
-		"event":    event,
+		"workflow_id":          state.ID,
+		"task":                 task,
+		"current_step":         state.CurrentStep,
+		"waiting_for_approval": state.WaitingForApproval,
+		"instructions":         firstStep.Instructions,
+		"steps":                state.Steps,
+		"event":                event,
 	}, "", "  ")
 	return string(output)
 }
@@ -265,12 +364,24 @@ func workflowStatus() string {
 	}
 	progress := float64(completed) / float64(len(state.Steps)) * 100
 
+	// Get current step instructions
+	var instructions string
+	for _, s := range state.Steps {
+		if s.Name == state.CurrentStep {
+			instructions = s.Instructions
+			break
+		}
+	}
+
 	output, _ := json.MarshalIndent(map[string]any{
-		"workflow_id":  state.ID,
-		"task":         state.Task,
-		"current_step": state.CurrentStep,
-		"progress":     fmt.Sprintf("%.0f%%", progress),
-		"steps":        state.Steps,
+		"workflow_id":           state.ID,
+		"task":                  state.Task,
+		"current_step":          state.CurrentStep,
+		"waiting_for_approval":  state.WaitingForApproval,
+		"verification_criteria": state.VerificationCriteria,
+		"progress":              fmt.Sprintf("%.0f%%", progress),
+		"instructions":          instructions,
+		"steps":                 state.Steps,
 	}, "", "  ")
 	return string(output)
 }
@@ -286,6 +397,7 @@ func workflowStep(step, status string) string {
 			state.Steps[i].Status = status
 			if status == "in_progress" {
 				state.CurrentStep = step
+				state.WaitingForApproval = state.Steps[i].NeedsApproval
 			}
 			break
 		}
@@ -303,9 +415,10 @@ func workflowStep(step, status string) string {
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"updated":      true,
-		"current_step": state.CurrentStep,
-		"event":        event,
+		"updated":              true,
+		"current_step":         state.CurrentStep,
+		"waiting_for_approval": state.WaitingForApproval,
+		"event":                event,
 	}, "", "  ")
 	return string(output)
 }
@@ -336,11 +449,11 @@ func workflowBlocked(reason string) string {
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"blocked":              true,
-		"step":                 state.CurrentStep,
-		"reason":               reason,
+		"blocked":                  true,
+		"step":                     state.CurrentStep,
+		"reason":                   reason,
 		"needs_human_intervention": true,
-		"event":                event,
+		"event":                    event,
 	}, "", "  ")
 	return string(output)
 }
@@ -351,18 +464,22 @@ func workflowNext() string {
 	}
 
 	// Find current step and move to next
+	var previousStep string
 	var nextStep string
 	for i, s := range state.Steps {
 		if s.Name == state.CurrentStep {
+			previousStep = s.Name
 			// Mark current as completed
 			state.Steps[i].Status = "completed"
-			// Find next pending step
+			// Find next step
 			if i+1 < len(state.Steps) {
 				nextStep = state.Steps[i+1].Name
 				state.Steps[i+1].Status = "in_progress"
 				state.CurrentStep = nextStep
+				state.WaitingForApproval = state.Steps[i+1].NeedsApproval
 			} else {
 				state.CurrentStep = "done"
+				state.WaitingForApproval = false
 			}
 			break
 		}
@@ -370,20 +487,89 @@ func workflowNext() string {
 	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	saveState()
 
+	// Get next step instructions
+	var instructions string
+	for _, s := range state.Steps {
+		if s.Name == nextStep {
+			instructions = s.Instructions
+			break
+		}
+	}
+
 	event := WorkflowEvent{
 		Event:      "workflow",
 		Type:       "step_complete",
 		WorkflowID: state.ID,
-		Step:       state.CurrentStep,
+		Step:       previousStep,
 		NextStep:   nextStep,
 		Status:     "in_progress",
 		Timestamp:  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
-		"previous_step": state.CurrentStep,
-		"current_step":  nextStep,
-		"event":         event,
+		"previous_step":        previousStep,
+		"current_step":         state.CurrentStep,
+		"waiting_for_approval": state.WaitingForApproval,
+		"instructions":         instructions,
+		"event":                event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowApprove() string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	if !state.WaitingForApproval {
+		return `{"error": "not waiting for approval", "hint": "current step does not require approval"}`
+	}
+
+	state.WaitingForApproval = false
+	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	saveState()
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "approved",
+		WorkflowID: state.ID,
+		Step:       state.CurrentStep,
+		Status:     "approved",
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"approved":             true,
+		"step":                 state.CurrentStep,
+		"waiting_for_approval": false,
+		"hint":                 "Call workflow_next to proceed to the next step",
+		"event":                event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowSetCriteria(criteria []string) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	state.VerificationCriteria = criteria
+	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	saveState()
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "criteria_set",
+		WorkflowID: state.ID,
+		Step:       state.CurrentStep,
+		Message:    fmt.Sprintf("Set %d verification criteria", len(criteria)),
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"criteria_set": true,
+		"criteria":     criteria,
+		"event":        event,
 	}, "", "  ")
 	return string(output)
 }

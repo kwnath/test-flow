@@ -12,19 +12,36 @@ Initialize a new workflow for the given task.
 When this command is invoked:
 
 1. Call the `workflow_init` tool with the task description
-2. Announce the workflow has started
-3. Begin the **plan** step immediately
+2. Display the workflow configuration (steps with approval gates)
+3. Show the current step instructions
+4. Begin working on the **plan** step
 
-## Workflow Steps
+## Dynamic Workflow
 
-The workflow follows these steps in order:
+The workflow is loaded from `workflow.yaml` in the project root. Each step has:
+- **name**: Step identifier
+- **needs_approval**: Whether user approval is required before proceeding
+- **instructions**: What to do in this step
 
-1. **plan** - Explore the codebase, understand the problem, design an approach
-2. **criteria** - Define specific, measurable completion criteria
-3. **execute** - Implement the changes
-4. **verify** - Run tests, verify criteria are met
-5. **pr** - Create a pull request
-6. **review** - Wait for human review, address feedback
+## Default Steps
+
+1. **plan** (approval required) - Explore codebase, design approach, set verification criteria
+2. **execute** - Implement changes
+3. **verify** - Run tests, check criteria
+4. **pr** (approval required) - Create pull request
+5. **complete** - Summarize accomplishments
+
+## Setting Verification Criteria
+
+During the plan step, use `workflow_set_criteria` to define what will be verified:
+
+```
+workflow_set_criteria(criteria: [
+  "npm test passes",
+  "No TypeScript errors",
+  "Login flow works in browser"
+])
+```
 
 ## Example
 
@@ -36,13 +53,33 @@ I'll initialize a workflow for this task.
 
 [Call workflow_init with task: "Fix authentication bug where users can't login with SSO"]
 
-Workflow initialized. Starting with the **plan** step.
+## Workflow Started
+
+**Task:** Fix authentication bug where users can't login with SSO
+**Current Step:** plan (requires approval)
+
+### Steps Overview
+| Step | Approval |
+|------|----------|
+| ► plan | required |
+| ○ execute | - |
+| ○ verify | - |
+| ○ pr | required |
+| ○ complete | - |
+
+### Plan Step Instructions
+[Show instructions from workflow response]
 
 Let me explore the codebase to understand the authentication flow...
 ```
 
-## Important
+## Approval Gates
 
-- Always emit the workflow event JSON so it can be parsed by external systems
-- Update step status as you progress using `workflow_step` or `workflow_next`
-- If you need human input, use `workflow_blocked`
+Steps with `needs_approval: true` will wait for user feedback. When presenting your plan or PR, wait for the user to approve before calling `workflow_next`.
+
+**Approval phrases to detect:**
+- "looks good", "lgtm", "approved", "ship it"
+- "yes", "go ahead", "proceed"
+- Any positive confirmation
+
+When you detect approval, call `workflow_approve` then `workflow_next` to proceed.
