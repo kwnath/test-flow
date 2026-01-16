@@ -7,18 +7,41 @@ description: Standard development workflow with approval gates
 steps:
   - name: plan
     needs_approval: true
+    allows_iteration: true
+    approval_prompt: |
+      Review the implementation plan. Does this approach look correct?
+      - /workflow-approve to proceed to defining criteria
+      - /workflow-iterate <feedback> to request changes
     instructions: |
       Explore the codebase and design your approach:
       1. Search for relevant files and understand the existing code
       2. Identify what needs to change
       3. Design your implementation approach
-      4. Define verification criteria (tests to run, behavior to check)
+      4. **Include ASCII art or Mermaid diagrams** to visualize architecture
+      5. Define verification criteria (tests to run, behavior to check)
 
-      When done, present your plan and criteria to the user.
-      Use workflow_set_criteria to record what will be verified.
+      When done, present your plan and call workflow_next().
+      Then STOP AND WAIT for user approval.
+
+  - name: criteria
+    needs_approval: true
+    allows_iteration: true
+    approval_prompt: |
+      Review the completion criteria. Are these the right things to verify?
+      - /workflow-approve to proceed to implementation
+      - /workflow-iterate <feedback> to adjust criteria
+    instructions: |
+      Define specific, measurable completion criteria:
+      1. Based on the approved plan, list what must be verified
+      2. Include tests to run, behavior to check, edge cases
+      3. Use workflow_set_criteria to record the criteria
+
+      When done, present criteria and call workflow_next().
+      Then STOP AND WAIT for user approval.
 
   - name: execute
     needs_approval: false
+    allows_iteration: true
     instructions: |
       Implement the changes according to your plan:
       1. Make the necessary code changes
@@ -30,6 +53,7 @@ steps:
 
   - name: verify
     needs_approval: false
+    allows_iteration: true
     instructions: |
       Verify all criteria are met:
       1. Run the tests/checks defined in verification criteria
@@ -40,14 +64,20 @@ steps:
 
   - name: pr
     needs_approval: true
+    allows_iteration: false
+    approval_prompt: |
+      Review the pull request. Ready to merge?
+      - /workflow-approve to complete the workflow
+      - /workflow-iterate <feedback> to request changes (not allowed on this step)
     instructions: |
       Create a pull request:
       1. Create a descriptive PR with summary and test plan
       2. Present the PR to the user for review
 
-      Wait for user approval before marking complete.
+      Call workflow_next() and STOP AND WAIT for user approval.
 
   - name: complete
     needs_approval: false
+    allows_iteration: false
     instructions: |
       Workflow complete. Summarize what was accomplished.

@@ -31,6 +31,13 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+// Step metadata for approval and iteration
+type StepMetadata struct {
+	RequiresApproval bool   `json:"requires_approval"`
+	AllowsIteration  bool   `json:"allows_iteration"`
+	ApprovalPrompt   string `json:"approval_prompt,omitempty"`
+}
+
 // Workflow configuration (loaded from YAML)
 type WorkflowConfig struct {
 	Name        string       `yaml:"name" json:"name"`
@@ -39,9 +46,11 @@ type WorkflowConfig struct {
 }
 
 type StepConfig struct {
-	Name          string `yaml:"name" json:"name"`
-	NeedsApproval bool   `yaml:"needs_approval" json:"needs_approval"`
-	Instructions  string `yaml:"instructions" json:"instructions"`
+	Name             string `yaml:"name" json:"name"`
+	NeedsApproval    bool   `yaml:"needs_approval" json:"needs_approval"`
+	AllowsIteration  bool   `yaml:"allows_iteration" json:"allows_iteration"`
+	ApprovalPrompt   string `yaml:"approval_prompt" json:"approval_prompt,omitempty"`
+	Instructions     string `yaml:"instructions" json:"instructions"`
 }
 
 // Workflow runtime state
@@ -52,32 +61,44 @@ type WorkflowState struct {
 	Steps                []WorkflowStep `json:"steps"`
 	WaitingForApproval   bool           `json:"waiting_for_approval"`
 	VerificationCriteria []string       `json:"verification_criteria,omitempty"`
+	IterationCount       int            `json:"iteration_count"`
+	IterationFeedback    []string       `json:"iteration_feedback,omitempty"`
 	CreatedAt            string         `json:"created_at"`
 	UpdatedAt            string         `json:"updated_at"`
 }
 
 type WorkflowStep struct {
-	Name          string `json:"name"`
-	Status        string `json:"status"` // pending, in_progress, completed, blocked
-	NeedsApproval bool   `json:"needs_approval"`
-	Instructions  string `json:"instructions"`
+	Name          string        `json:"name"`
+	Status        string        `json:"status"` // pending, in_progress, awaiting_approval, completed, blocked
+	NeedsApproval bool          `json:"needs_approval"`
+	Instructions  string        `json:"instructions"`
+	Metadata      *StepMetadata `json:"metadata,omitempty"`
 }
 
 type WorkflowEvent struct {
-	Event      string `json:"event"`
-	Type       string `json:"type"`
-	WorkflowID string `json:"workflow_id"`
-	Step       string `json:"step,omitempty"`
-	NextStep   string `json:"next_step,omitempty"`
-	Status     string `json:"status,omitempty"`
-	Message    string `json:"message,omitempty"`
-	Timestamp  string `json:"timestamp"`
+	Event          string `json:"event"`
+	Type           string `json:"type"`
+	WorkflowID     string `json:"workflow_id"`
+	Step           string `json:"step,omitempty"`
+	NextStep       string `json:"next_step,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Message        string `json:"message,omitempty"`
+	ApprovalPrompt string `json:"approval_prompt,omitempty"`
+	CanIterate     bool   `json:"can_iterate,omitempty"`
+	Timestamp      string `json:"timestamp"`
 }
 
 var state *WorkflowState
 var config *WorkflowConfig
 var stateFile string
 var configFile string
+
+// Default approval prompts for each step
+var defaultApprovalPrompts = map[string]string{
+	"plan":     "Review the implementation plan. Does this approach look correct? You can approve with /workflow-approve or request changes with /workflow-iterate <feedback>",
+	"criteria": "Review the completion criteria. Are these the right things to verify? Approve with /workflow-approve or iterate with /workflow-iterate <feedback>",
+	"pr":       "Review the pull request. Ready to merge? Approve with /workflow-approve or request changes with /workflow-iterate <feedback>",
+}
 
 func main() {
 	// Determine file locations
@@ -110,11 +131,12 @@ func loadConfig() {
 		Name:        "default",
 		Description: "Default workflow",
 		Steps: []StepConfig{
-			{Name: "plan", NeedsApproval: true, Instructions: "Explore the codebase and design your approach."},
-			{Name: "execute", NeedsApproval: false, Instructions: "Implement the changes."},
-			{Name: "verify", NeedsApproval: false, Instructions: "Run tests and verify criteria."},
-			{Name: "pr", NeedsApproval: true, Instructions: "Create a pull request."},
-			{Name: "complete", NeedsApproval: false, Instructions: "Summarize accomplishments."},
+			{Name: "plan", NeedsApproval: true, AllowsIteration: true, ApprovalPrompt: defaultApprovalPrompts["plan"], Instructions: "Explore the codebase and design your approach. Include diagrams to visualize architecture."},
+			{Name: "criteria", NeedsApproval: true, AllowsIteration: true, ApprovalPrompt: defaultApprovalPrompts["criteria"], Instructions: "Define specific, measurable completion criteria."},
+			{Name: "execute", NeedsApproval: false, AllowsIteration: true, Instructions: "Implement the changes."},
+			{Name: "verify", NeedsApproval: false, AllowsIteration: true, Instructions: "Run tests and verify all criteria pass."},
+			{Name: "pr", NeedsApproval: true, AllowsIteration: false, ApprovalPrompt: defaultApprovalPrompts["pr"], Instructions: "Create a pull request."},
+			{Name: "complete", NeedsApproval: false, AllowsIteration: false, Instructions: "Summarize accomplishments."},
 		},
 	}
 
@@ -142,7 +164,7 @@ func handleRequest(req Request) Response {
 				},
 				"serverInfo": map[string]any{
 					"name":    "workflow-mcp",
-					"version": "2.0.0",
+					"version": "2.1.0",
 				},
 			},
 		}
@@ -209,7 +231,7 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_next",
-						"description": "Complete current step and move to next. Use when step work is done or approval is given.",
+						"description": "Request to move to the next step. If step requires approval, sets status to awaiting_approval. Otherwise moves to next step.",
 						"inputSchema": map[string]any{
 							"type":       "object",
 							"properties": map[string]any{},
@@ -217,10 +239,24 @@ func handleRequest(req Request) Response {
 					},
 					{
 						"name":        "workflow_approve",
-						"description": "Approve the current step (clears waiting_for_approval). Call this when user gives approval.",
+						"description": "Approve the current step and move to the next step. Only works when step is awaiting_approval.",
 						"inputSchema": map[string]any{
 							"type":       "object",
 							"properties": map[string]any{},
+						},
+					},
+					{
+						"name":        "workflow_iterate",
+						"description": "Provide feedback and iterate on the current step. Keeps you on the same step to revise based on feedback.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"feedback": map[string]any{
+									"type":        "string",
+									"description": "Feedback for iteration - what needs to change",
+								},
+							},
+							"required": []string{"feedback"},
 						},
 					},
 					{
@@ -286,6 +322,12 @@ func handleToolCall(name string, args map[string]any) string {
 		return workflowNext()
 	case "workflow_approve":
 		return workflowApprove()
+	case "workflow_iterate":
+		feedback := ""
+		if f, ok := args["feedback"].(string); ok {
+			feedback = f
+		}
+		return workflowIterate(feedback)
 	case "workflow_set_criteria":
 		criteria := []string{}
 		if c, ok := args["criteria"].([]any); ok {
@@ -302,18 +344,34 @@ func handleToolCall(name string, args map[string]any) string {
 }
 
 func workflowInit(task string) string {
-	// Build steps from config
+	// Build steps from config with metadata
 	steps := make([]WorkflowStep, len(config.Steps))
 	for i, sc := range config.Steps {
 		status := "pending"
 		if i == 0 {
 			status = "in_progress"
 		}
+
+		// Build metadata
+		metadata := &StepMetadata{
+			RequiresApproval: sc.NeedsApproval,
+			AllowsIteration:  sc.AllowsIteration,
+			ApprovalPrompt:   sc.ApprovalPrompt,
+		}
+
+		// Use default approval prompt if not specified
+		if metadata.RequiresApproval && metadata.ApprovalPrompt == "" {
+			if prompt, ok := defaultApprovalPrompts[sc.Name]; ok {
+				metadata.ApprovalPrompt = prompt
+			}
+		}
+
 		steps[i] = WorkflowStep{
 			Name:          sc.Name,
 			Status:        status,
 			NeedsApproval: sc.NeedsApproval,
 			Instructions:  sc.Instructions,
+			Metadata:      metadata,
 		}
 	}
 
@@ -323,7 +381,9 @@ func workflowInit(task string) string {
 		Task:               task,
 		CurrentStep:        firstStep.Name,
 		Steps:              steps,
-		WaitingForApproval: firstStep.NeedsApproval,
+		WaitingForApproval: false, // Not waiting yet - work must be done first
+		IterationCount:     0,
+		IterationFeedback:  []string{},
 		CreatedAt:          time.Now().UTC().Format(time.RFC3339),
 		UpdatedAt:          time.Now().UTC().Format(time.RFC3339),
 	}
@@ -335,6 +395,7 @@ func workflowInit(task string) string {
 		WorkflowID: state.ID,
 		Step:       firstStep.Name,
 		Status:     "in_progress",
+		CanIterate: firstStep.AllowsIteration,
 		Timestamp:  time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -343,6 +404,8 @@ func workflowInit(task string) string {
 		"task":                 task,
 		"current_step":         state.CurrentStep,
 		"waiting_for_approval": state.WaitingForApproval,
+		"requires_approval":    firstStep.NeedsApproval,
+		"allows_iteration":     firstStep.AllowsIteration,
 		"instructions":         firstStep.Instructions,
 		"steps":                state.Steps,
 		"event":                event,
@@ -364,25 +427,39 @@ func workflowStatus() string {
 	}
 	progress := float64(completed) / float64(len(state.Steps)) * 100
 
-	// Get current step instructions
+	// Get current step info
 	var instructions string
+	var metadata *StepMetadata
 	for _, s := range state.Steps {
 		if s.Name == state.CurrentStep {
 			instructions = s.Instructions
+			metadata = s.Metadata
 			break
 		}
 	}
 
-	output, _ := json.MarshalIndent(map[string]any{
+	result := map[string]any{
 		"workflow_id":           state.ID,
 		"task":                  state.Task,
 		"current_step":          state.CurrentStep,
 		"waiting_for_approval":  state.WaitingForApproval,
 		"verification_criteria": state.VerificationCriteria,
+		"iteration_count":       state.IterationCount,
+		"iteration_feedback":    state.IterationFeedback,
 		"progress":              fmt.Sprintf("%.0f%%", progress),
 		"instructions":          instructions,
 		"steps":                 state.Steps,
-	}, "", "  ")
+	}
+
+	if metadata != nil {
+		result["requires_approval"] = metadata.RequiresApproval
+		result["allows_iteration"] = metadata.AllowsIteration
+		if metadata.ApprovalPrompt != "" {
+			result["approval_prompt"] = metadata.ApprovalPrompt
+		}
+	}
+
+	output, _ := json.MarshalIndent(result, "", "  ")
 	return string(output)
 }
 
@@ -397,7 +474,9 @@ func workflowStep(step, status string) string {
 			state.Steps[i].Status = status
 			if status == "in_progress" {
 				state.CurrentStep = step
-				state.WaitingForApproval = state.Steps[i].NeedsApproval
+				state.WaitingForApproval = false
+				state.IterationCount = 0
+				state.IterationFeedback = []string{}
 			}
 			break
 		}
@@ -463,38 +542,86 @@ func workflowNext() string {
 		return `{"error": "no workflow initialized"}`
 	}
 
-	// Find current step and move to next
-	var previousStep string
-	var nextStep string
+	// Find current step
+	var currentStepIdx int = -1
+	var currentStep *WorkflowStep
 	for i, s := range state.Steps {
 		if s.Name == state.CurrentStep {
-			previousStep = s.Name
-			// Mark current as completed
-			state.Steps[i].Status = "completed"
-			// Find next step
-			if i+1 < len(state.Steps) {
-				nextStep = state.Steps[i+1].Name
-				state.Steps[i+1].Status = "in_progress"
-				state.CurrentStep = nextStep
-				state.WaitingForApproval = state.Steps[i+1].NeedsApproval
-			} else {
-				state.CurrentStep = "done"
-				state.WaitingForApproval = false
-			}
+			currentStepIdx = i
+			currentStep = &state.Steps[i]
 			break
 		}
 	}
+
+	if currentStep == nil {
+		return `{"error": "current step not found"}`
+	}
+
+	// If step requires approval and is in_progress, set to awaiting_approval
+	if currentStep.NeedsApproval && currentStep.Status == "in_progress" {
+		state.Steps[currentStepIdx].Status = "awaiting_approval"
+		state.WaitingForApproval = true
+		state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		saveState()
+
+		approvalPrompt := ""
+		canIterate := false
+		if currentStep.Metadata != nil {
+			approvalPrompt = currentStep.Metadata.ApprovalPrompt
+			canIterate = currentStep.Metadata.AllowsIteration
+		}
+
+		event := WorkflowEvent{
+			Event:          "workflow",
+			Type:           "awaiting_approval",
+			WorkflowID:     state.ID,
+			Step:           currentStep.Name,
+			Status:         "awaiting_approval",
+			ApprovalPrompt: approvalPrompt,
+			CanIterate:     canIterate,
+			Timestamp:      time.Now().UTC().Format(time.RFC3339),
+		}
+
+		output, _ := json.MarshalIndent(map[string]any{
+			"status":               "awaiting_approval",
+			"step":                 currentStep.Name,
+			"waiting_for_approval": true,
+			"approval_prompt":      approvalPrompt,
+			"can_iterate":          canIterate,
+			"message":              "STOP AND WAIT for user approval. Do not proceed until user calls /workflow-approve or /workflow-iterate",
+			"event":                event,
+		}, "", "  ")
+		return string(output)
+	}
+
+	// Step doesn't require approval or is already approved - move to next
+	previousStep := currentStep.Name
+	state.Steps[currentStepIdx].Status = "completed"
+
+	var nextStep string
+	var instructions string
+	var requiresApproval bool
+	var allowsIteration bool
+
+	if currentStepIdx+1 < len(state.Steps) {
+		nextStep = state.Steps[currentStepIdx+1].Name
+		state.Steps[currentStepIdx+1].Status = "in_progress"
+		state.CurrentStep = nextStep
+		instructions = state.Steps[currentStepIdx+1].Instructions
+		if state.Steps[currentStepIdx+1].Metadata != nil {
+			requiresApproval = state.Steps[currentStepIdx+1].Metadata.RequiresApproval
+			allowsIteration = state.Steps[currentStepIdx+1].Metadata.AllowsIteration
+		}
+	} else {
+		state.CurrentStep = "done"
+	}
+
+	// Reset iteration tracking for new step
+	state.WaitingForApproval = false
+	state.IterationCount = 0
+	state.IterationFeedback = []string{}
 	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	saveState()
-
-	// Get next step instructions
-	var instructions string
-	for _, s := range state.Steps {
-		if s.Name == nextStep {
-			instructions = s.Instructions
-			break
-		}
-	}
 
 	event := WorkflowEvent{
 		Event:      "workflow",
@@ -510,6 +637,8 @@ func workflowNext() string {
 		"previous_step":        previousStep,
 		"current_step":         state.CurrentStep,
 		"waiting_for_approval": state.WaitingForApproval,
+		"requires_approval":    requiresApproval,
+		"allows_iteration":     allowsIteration,
 		"instructions":         instructions,
 		"event":                event,
 	}, "", "  ")
@@ -521,11 +650,51 @@ func workflowApprove() string {
 		return `{"error": "no workflow initialized"}`
 	}
 
-	if !state.WaitingForApproval {
-		return `{"error": "not waiting for approval", "hint": "current step does not require approval"}`
+	// Find current step
+	var currentStepIdx int = -1
+	var currentStep *WorkflowStep
+	for i, s := range state.Steps {
+		if s.Name == state.CurrentStep {
+			currentStepIdx = i
+			currentStep = &state.Steps[i]
+			break
+		}
 	}
 
+	if currentStep == nil {
+		return `{"error": "current step not found"}`
+	}
+
+	if currentStep.Status != "awaiting_approval" {
+		return `{"error": "step is not awaiting approval", "hint": "call workflow_next first to request approval", "current_status": "` + currentStep.Status + `"}`
+	}
+
+	// Mark current step as completed and move to next
+	previousStep := currentStep.Name
+	state.Steps[currentStepIdx].Status = "completed"
+
+	var nextStep string
+	var instructions string
+	var requiresApproval bool
+	var allowsIteration bool
+
+	if currentStepIdx+1 < len(state.Steps) {
+		nextStep = state.Steps[currentStepIdx+1].Name
+		state.Steps[currentStepIdx+1].Status = "in_progress"
+		state.CurrentStep = nextStep
+		instructions = state.Steps[currentStepIdx+1].Instructions
+		if state.Steps[currentStepIdx+1].Metadata != nil {
+			requiresApproval = state.Steps[currentStepIdx+1].Metadata.RequiresApproval
+			allowsIteration = state.Steps[currentStepIdx+1].Metadata.AllowsIteration
+		}
+	} else {
+		state.CurrentStep = "done"
+	}
+
+	// Reset iteration tracking
 	state.WaitingForApproval = false
+	state.IterationCount = 0
+	state.IterationFeedback = []string{}
 	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	saveState()
 
@@ -533,17 +702,87 @@ func workflowApprove() string {
 		Event:      "workflow",
 		Type:       "approved",
 		WorkflowID: state.ID,
-		Step:       state.CurrentStep,
+		Step:       previousStep,
+		NextStep:   nextStep,
 		Status:     "approved",
 		Timestamp:  time.Now().UTC().Format(time.RFC3339),
 	}
 
 	output, _ := json.MarshalIndent(map[string]any{
 		"approved":             true,
-		"step":                 state.CurrentStep,
+		"previous_step":        previousStep,
+		"current_step":         state.CurrentStep,
 		"waiting_for_approval": false,
-		"hint":                 "Call workflow_next to proceed to the next step",
+		"requires_approval":    requiresApproval,
+		"allows_iteration":     allowsIteration,
+		"instructions":         instructions,
 		"event":                event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowIterate(feedback string) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	// Find current step
+	var currentStepIdx int = -1
+	var currentStep *WorkflowStep
+	for i, s := range state.Steps {
+		if s.Name == state.CurrentStep {
+			currentStepIdx = i
+			currentStep = &state.Steps[i]
+			break
+		}
+	}
+
+	if currentStep == nil {
+		return `{"error": "current step not found"}`
+	}
+
+	// Check if iteration is allowed
+	allowsIteration := false
+	if currentStep.Metadata != nil {
+		allowsIteration = currentStep.Metadata.AllowsIteration
+	}
+
+	if !allowsIteration {
+		return `{"error": "iteration not allowed on this step", "step": "` + currentStep.Name + `"}`
+	}
+
+	// Increment iteration count and store feedback
+	state.IterationCount++
+	if feedback != "" {
+		state.IterationFeedback = append(state.IterationFeedback, feedback)
+	}
+
+	// Set status back to in_progress
+	state.Steps[currentStepIdx].Status = "in_progress"
+	state.WaitingForApproval = false
+	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	saveState()
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "iteration",
+		WorkflowID: state.ID,
+		Step:       currentStep.Name,
+		Status:     "in_progress",
+		Message:    feedback,
+		CanIterate: true,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"iterated":           true,
+		"step":               currentStep.Name,
+		"iteration_count":    state.IterationCount,
+		"feedback":           feedback,
+		"all_feedback":       state.IterationFeedback,
+		"instructions":       currentStep.Instructions,
+		"message":            "Revise your work based on the feedback, then call workflow_next when ready for approval",
+		"event":              event,
 	}, "", "  ")
 	return string(output)
 }
