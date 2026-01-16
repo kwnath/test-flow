@@ -104,21 +104,9 @@ When in the **plan** step:
 
 **Phase 1: Clarify (if needed)**
 - Review the task requirements
-- If anything is ambiguous, **ask clarifying questions**
-- **Store questions/answers** via `workflow_set_artifact("clarifications", {...})`
+- If anything is ambiguous or unclear, **ask clarifying questions first**
 - Wait for answers before proceeding to design
 - Skip this if requirements are clear
-
-Store clarifications so vibe apps can display them:
-```json
-workflow_set_artifact("clarifications", {
-  "questions": [
-    {"id": "app_type", "question": "What type of todo app?", "answer": "CLI"},
-    {"id": "language", "question": "Which language?", "answer": "Node.js"},
-    {"id": "storage", "question": "How to store data?", "answer": "JSON file"}
-  ]
-})
-```
 
 **Phase 2: Design**
 1. Explore the codebase thoroughly using available tools

@@ -98,42 +98,10 @@ interface Artifact {
 ```
 
 Access artifacts by type:
-- `artifacts.clarifications.content` - Questions asked and answers received
 - `artifacts.plan.content` - The implementation plan (string, markdown)
 - `artifacts.criteria.content` - Verification checklist (array of `- [ ]` / `- [x]` strings)
-- `artifacts.pr.content` - PR info (object with `number`, `url`, `branch`)
+- `artifacts.pr.content` - PR info (object with `number` and `url`)
 - `artifacts.summary.content` - Goal progress summary (see below)
-
-### Clarifications
-
-When Claude asks clarifying questions, they're stored for display:
-
-```json
-{
-  "artifacts": {
-    "clarifications": {
-      "content": {
-        "questions": [
-          {"id": "app_type", "question": "What type of todo app?", "answer": "CLI"},
-          {"id": "language", "question": "Which language?", "answer": "Node.js"},
-          {"id": "storage", "question": "How to store data?", "answer": "JSON file"}
-        ]
-      }
-    }
-  }
-}
-```
-
-Display example:
-```
-┌─────────────────────────────────────────────────┐
-│ Clarifications                                  │
-├─────────────────────────────────────────────────┤
-│ App Type: CLI                                   │
-│ Language: Node.js                               │
-│ Storage: JSON file                              │
-└─────────────────────────────────────────────────┘
-```
 
 Artifacts are extensible - new types can be added without code changes.
 
