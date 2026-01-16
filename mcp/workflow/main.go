@@ -149,7 +149,8 @@ func loadConfig() {
 			{Name: "execute", NeedsApproval: false, AllowsIteration: true, Instructions: "Implement the changes."},
 			{Name: "verify", NeedsApproval: false, AllowsIteration: true, Instructions: "Run tests and verify all criteria pass."},
 			{Name: "pr", NeedsApproval: false, AllowsIteration: false, Instructions: "Create a pull request."},
-			{Name: "review", NeedsApproval: false, AllowsIteration: true, Instructions: "Monitor PR for comments, address feedback, auto-proceed when quiet."},
+			{Name: "review", NeedsApproval: false, AllowsIteration: true, Instructions: "Monitor PR for comments, address feedback, auto-proceed after 5 mins quiet."},
+			{Name: "human_review", NeedsApproval: true, AllowsIteration: false, ApprovalPrompt: "PR reviewed. Ready to merge?", Instructions: "Present PR status, wait for human approval to merge."},
 			{Name: "complete", NeedsApproval: false, AllowsIteration: false, Instructions: "Summarize accomplishments."},
 		},
 	}
@@ -1001,12 +1002,17 @@ func workflowCheckPR(commentCount int) string {
 	timeSinceLastCheck := now.Sub(lastCheck)
 
 	hasNewComments := commentCount > state.LastCommentCount
-	noNewCommentsTimeout := 1 * time.Minute
+	humanReviewTimeout := 5 * time.Minute // Move to human review after 5 mins quiet
 
 	// Update tracking
-	state.LastCommentCheck = now.Format(time.RFC3339)
 	previousCount := state.LastCommentCount
-	state.LastCommentCount = commentCount
+	state.LastCommentCheck = now.Format(time.RFC3339)
+
+	// Reset quiet timer if new comments
+	if hasNewComments {
+		state.LastCommentCount = commentCount
+	}
+
 	state.UpdatedAt = now.Format(time.RFC3339)
 	saveState()
 
@@ -1017,15 +1023,16 @@ func workflowCheckPR(commentCount int) string {
 		newCount := commentCount - previousCount
 		action = "address_comments"
 		message = fmt.Sprintf("Found %d new comment(s). Address the feedback, then check again.", newCount)
-	} else if timeSinceLastCheck >= noNewCommentsTimeout {
-		// No new comments for 1+ minute - ready to proceed
-		action = "ready_for_approval"
-		message = "No new comments for 1+ minute. Ready to call workflow_next for approval."
+	} else if timeSinceLastCheck >= humanReviewTimeout {
+		// No new comments for 5 mins - ready for human review
+		action = "ready_for_human_review"
+		message = "No new comments for 5 minutes. Ready for human review - call workflow_next()."
 	} else {
 		// Still within timeout window, keep waiting
-		waitSeconds := int((noNewCommentsTimeout - timeSinceLastCheck).Seconds())
+		waitSeconds := 60 // Check every minute
+		minsRemaining := int((humanReviewTimeout - timeSinceLastCheck).Minutes())
 		action = "wait"
-		message = fmt.Sprintf("No new comments yet. Wait %d seconds then check again.", waitSeconds)
+		message = fmt.Sprintf("No new comments. ~%d min(s) until human review. Wait %d seconds then check again.", minsRemaining, waitSeconds)
 	}
 
 	event := WorkflowEvent{
@@ -1043,6 +1050,7 @@ func workflowCheckPR(commentCount int) string {
 		"previous_count":      previousCount,
 		"has_new_comments":    hasNewComments,
 		"seconds_since_check": int(timeSinceLastCheck.Seconds()),
+		"mins_until_human_review": int((humanReviewTimeout - timeSinceLastCheck).Minutes()),
 		"action":              action,
 		"message":             message,
 		"event":               event,

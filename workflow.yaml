@@ -86,9 +86,23 @@ steps:
       3. Based on action:
          - "address_comments" → address feedback, update summary, loop back to 1
          - "wait" → wait 1 minute, loop back to 1
-         - "ready_for_approval" → call workflow_next() to complete
+         - "ready_for_human_review" → call workflow_next() to request human approval
 
-      Keep looping until no new comments for 1 minute, then auto-proceed.
+      Stops after 5 mins of no new comments.
+
+  - name: human_review
+    needs_approval: true
+    allows_iteration: false
+    approval_prompt: |
+      PR has been reviewed and all comments addressed.
+      Ready to merge? Say "approved" or "merge it"
+    instructions: |
+      Present PR status to user:
+      - Show PR link
+      - Confirm all review comments addressed
+      - Wait for human approval to merge
+
+      STOP AND WAIT for user approval.
 
   - name: complete
     needs_approval: false
