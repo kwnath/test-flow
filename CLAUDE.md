@@ -120,12 +120,43 @@ When in the **plan** step:
 
 **IMPORTANT: The plan saved via `workflow_set_plan()` must be the COMPLETE plan, not a summary. External apps display this plan to users. Include all details, diagrams, options, and explanations - but exclude exploration noise (tool outputs, file listings, command results). Just the clean plan.**
 
+### Plan Formatting
+
+Plans should be **well-structured markdown** that's easy to read:
+
+```markdown
+## Implementation Plan
+
+### Overview
+Brief summary of what we're building and the approach.
+
+### Architecture
+[ASCII diagram or description of components]
+
+### Key Components
+1. **Component A** - What it does
+2. **Component B** - What it does
+
+### Files to Create/Modify
+- `path/to/file.ts` - Description
+- `path/to/other.ts` - Description
+
+### Approach
+Step-by-step implementation order.
+```
+
+**Guidelines:**
+- Use **headers** to organize sections
+- Include **diagrams** (ASCII or Mermaid) where helpful
+- Keep it **scannable** - bullets and short paragraphs
+- **No tool output** - no "Running: find...", grep results, etc.
+
 ### Criteria Step Instructions
 
 When in the **criteria** step:
 
-1. Based on the approved plan, define specific completion criteria
-2. Criteria should be measurable and verifiable
+1. Based on the approved plan, define **high-level acceptance criteria**
+2. Keep to **5-8 items max** - each a meaningful check, not a test case
 3. Use `workflow_set_criteria()` to record the criteria
 4. Present criteria to the user for review
 5. Call `workflow_next()` to request approval
@@ -156,19 +187,38 @@ When in the **review** step:
 
 **The review step polls for PR comments. If no new comments for 1 minute, it's ready for approval.**
 
-### Verification Criteria
+### Verification Criteria Format
 
-During planning/criteria, define criteria to verify later:
+Criteria should be **high-level acceptance checks** - things you can verify work, not granular test cases.
 
+**GOOD** (high-level checklist):
 ```
-workflow_set_criteria(criteria: [
-  "npm test passes",
-  "No TypeScript errors",
-  "Login flow works in browser"
+workflow_set_criteria([
+  "All CRUD operations work correctly",
+  "Invalid inputs show appropriate errors",
+  "Help/usage displays when needed",
+  "No crashes or unhandled exceptions",
+  "Documentation covers all features"
 ])
 ```
 
-In the verify step, execute each criterion and confirm it passes.
+**BAD** (too granular - reads like unit tests):
+```
+workflow_set_criteria([
+  "node app.js add 'Task' creates task",
+  "node app.js add '' shows error",
+  "node app.js list shows tasks",
+  "node app.js done 1 marks complete",
+  "node app.js done 999 shows error",
+  // ... 10+ more detailed cases
+])
+```
+
+**Guidelines:**
+- **5-8 items max** - group related checks
+- **Acceptance-level** - "feature works" not "specific command works"
+- **Verifiable** - something you can demonstrate
+- **Well-formatted** - clean markdown checklist
 
 ### Event Output
 
