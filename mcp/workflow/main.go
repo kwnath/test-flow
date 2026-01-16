@@ -342,6 +342,35 @@ func handleRequest(req Request) Response {
 							"required": []string{"comment_count"},
 						},
 					},
+					{
+						"name":        "workflow_add_criteria",
+						"description": "Add new criteria to existing list. Can be called from any step.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"criteria": map[string]any{
+									"type":        "array",
+									"items":       map[string]any{"type": "string"},
+									"description": "New criteria to add (will be appended)",
+								},
+							},
+							"required": []string{"criteria"},
+						},
+					},
+					{
+						"name":        "workflow_goto",
+						"description": "Jump to any step without resetting. Use for flexible navigation.",
+						"inputSchema": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"step": map[string]any{
+									"type":        "string",
+									"description": "Step name to jump to",
+								},
+							},
+							"required": []string{"step"},
+						},
+					},
 				},
 			},
 		}
@@ -439,6 +468,22 @@ func handleToolCall(name string, args map[string]any) string {
 			commentCount = int(c)
 		}
 		return workflowCheckPR(commentCount)
+	case "workflow_add_criteria":
+		criteria := []string{}
+		if c, ok := args["criteria"].([]any); ok {
+			for _, item := range c {
+				if s, ok := item.(string); ok {
+					criteria = append(criteria, s)
+				}
+			}
+		}
+		return workflowAddCriteria(criteria)
+	case "workflow_goto":
+		step := ""
+		if s, ok := args["step"].(string); ok {
+			step = s
+		}
+		return workflowGoto(step)
 	default:
 		return `{"error": "unknown tool"}`
 	}
@@ -1064,6 +1109,104 @@ func workflowCheckPR(commentCount int) string {
 		"action":              action,
 		"message":             message,
 		"event":               event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowAddCriteria(newCriteria []string) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	// Get existing criteria from artifact
+	existingCriteria := []string{}
+	if artifact, ok := state.Artifacts["criteria"]; ok {
+		if content, ok := artifact.Content.([]any); ok {
+			for _, item := range content {
+				if s, ok := item.(string); ok {
+					existingCriteria = append(existingCriteria, s)
+				}
+			}
+		}
+	}
+
+	// Append new criteria
+	allCriteria := append(existingCriteria, newCriteria...)
+
+	// Update artifact
+	if state.Artifacts == nil {
+		state.Artifacts = make(map[string]Artifact)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	state.Artifacts["criteria"] = Artifact{
+		Type:      "criteria",
+		Content:   allCriteria,
+		Step:      state.CurrentStep,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	state.UpdatedAt = now
+	saveState()
+
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "criteria_added",
+		WorkflowID: state.ID,
+		Step:       state.CurrentStep,
+		Message:    fmt.Sprintf("Added %d criteria (total: %d)", len(newCriteria), len(allCriteria)),
+		Timestamp:  now,
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"criteria_added": true,
+		"added":          newCriteria,
+		"total":          len(allCriteria),
+		"all_criteria":   allCriteria,
+		"event":          event,
+	}, "", "  ")
+	return string(output)
+}
+
+func workflowGoto(stepName string) string {
+	if state == nil {
+		return `{"error": "no workflow initialized"}`
+	}
+
+	// Find the target step
+	var targetStepIdx int = -1
+	for i, s := range state.Steps {
+		if s.Name == stepName {
+			targetStepIdx = i
+			break
+		}
+	}
+
+	if targetStepIdx == -1 {
+		return `{"error": "step not found", "step": "` + stepName + `"}`
+	}
+
+	// Update current step to target
+	state.CurrentStep = stepName
+	state.Steps[targetStepIdx].Status = "in_progress"
+	state.WaitingForApproval = false
+	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	saveState()
+
+	targetStep := state.Steps[targetStepIdx]
+	event := WorkflowEvent{
+		Event:      "workflow",
+		Type:       "goto",
+		WorkflowID: state.ID,
+		Step:       stepName,
+		Status:     "in_progress",
+		Message:    fmt.Sprintf("Jumped to step: %s", stepName),
+		Timestamp:  state.UpdatedAt,
+	}
+
+	output, _ := json.MarshalIndent(map[string]any{
+		"jumped_to":    stepName,
+		"instructions": targetStep.Instructions,
+		"event":        event,
 	}, "", "  ")
 	return string(output)
 }
