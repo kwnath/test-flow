@@ -103,7 +103,7 @@ When in the **plan** step:
 
 1. Explore the codebase thoroughly using available tools
 2. Design your implementation approach
-3. **Include ASCII art or Mermaid diagrams** to visualize:
+3. **Include Mermaid diagrams** to visualize:
    - System architecture
    - Data flow
    - Component relationships
@@ -124,14 +124,19 @@ When in the **plan** step:
 
 Plans should be **well-structured markdown** that's easy to read:
 
-```markdown
+````markdown
 ## Implementation Plan
 
 ### Overview
 Brief summary of what we're building and the approach.
 
 ### Architecture
-[ASCII diagram or description of components]
+```mermaid
+graph TD
+    A[CLI] --> B[Command Parser]
+    B --> C[TodoService]
+    C --> D[Storage]
+```
 
 ### Key Components
 1. **Component A** - What it does
@@ -143,11 +148,11 @@ Brief summary of what we're building and the approach.
 
 ### Approach
 Step-by-step implementation order.
-```
+````
 
 **Guidelines:**
 - Use **headers** to organize sections
-- Include **diagrams** (ASCII or Mermaid) where helpful
+- Use **Mermaid diagrams** for architecture/flow visualization
 - Keep it **scannable** - bullets and short paragraphs
 - **No tool output** - no "Running: find...", grep results, etc.
 
@@ -268,7 +273,7 @@ State includes:
 ### Best Practices
 
 1. Always start tasks with `/workflow-start`
-2. **Include diagrams** (ASCII art or Mermaid) in plans
+2. **Include Mermaid diagrams** in plans for architecture/flow
 3. Set verification criteria during planning
 4. **Update summary artifact** at each step transition
 5. **STOP AND WAIT** at approval gates - never auto-proceed
