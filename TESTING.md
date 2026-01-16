@@ -104,7 +104,7 @@ echo "$RESP" | grep -q "workflow_id" || { echo "FAIL: workflow_init"; exit 1; }
 echo "$RESP" | grep -q "waiting_for_approval" || { echo "FAIL: waiting_for_approval"; exit 1; }
 
 echo "Testing state persistence..."
-[ -f tmp/workflow-state.json ] || { echo "FAIL: state not persisted"; exit 1; }
+[ -f ~/state/workflow_state.json ] || { echo "FAIL: state not persisted"; exit 1; }
 
 echo "Testing workflow_set_criteria..."
 RESP=$(echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"workflow_set_criteria","arguments":{"criteria":["test1","test2"]}}}' | $MCP)
@@ -122,7 +122,7 @@ echo ""
 echo "All tests passed!"
 
 # Cleanup
-rm -f tmp/workflow-state.json
+rm -f ~/state/workflow_state.json
 ```
 
 ### Run Tests
@@ -260,7 +260,7 @@ go test -v ./...
 
 4. Check state file:
    ```bash
-   cat tmp/workflow-state.json
+   cat ~/state/workflow_state.json
    ```
 
 5. Test blocked state:

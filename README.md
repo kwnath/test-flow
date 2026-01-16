@@ -144,7 +144,7 @@ steps:
 
 ## State Persistence
 
-Workflow state is saved to `./tmp/workflow-state.json`:
+Workflow state is saved to `~/state/workflow_state.json`:
 
 ```json
 {

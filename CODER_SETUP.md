@@ -220,7 +220,7 @@ ls -la ~/.claude/commands/
 ```bash
 # Check tmp directory exists and is writable
 mkdir -p /path/to/project/tmp
-ls -la /path/to/project/tmp/workflow-state.json
+ls -la ~/state/workflow_state.json
 ```
 
 ### Permission errors

@@ -136,7 +136,7 @@ Event types: `init`, `step_update`, `step_complete`, `awaiting_approval`, `appro
 
 ### State Persistence
 
-State is saved to `./tmp/workflow-state.json`. After context compaction, call `workflow_status()` to restore awareness.
+State is saved to `~/state/workflow_state.json`. After context compaction, call `workflow_status()` to restore awareness.
 
 State includes:
 - `iteration_count` - How many times current step has been iterated

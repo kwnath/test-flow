@@ -5,13 +5,13 @@ This guide explains how external applications can integrate with the workflow sy
 ## Overview
 
 The workflow MCP provides structured task management with:
-- **State persistence** in `tmp/workflow-state.json`
+- **State persistence** in `~/state/workflow_state.json`
 - **Structured events** emitted during workflow transitions
 - **Approval gates** that pause for human review
 
 ## Reading Workflow State
 
-Poll or watch `tmp/workflow-state.json` for the current state:
+Poll or watch `~/state/workflow_state.json` for the current state:
 
 ```json
 {
@@ -266,7 +266,7 @@ function parseWorkflowState(json: string): WorkflowDisplay {
 
 | File | Purpose |
 |------|---------|
-| `tmp/workflow-state.json` | Current workflow state |
+| `~/state/workflow_state.json` | Current workflow state |
 | `workflow.yaml` | Workflow configuration |
 
 ## Tips

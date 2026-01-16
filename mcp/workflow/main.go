@@ -104,7 +104,8 @@ var defaultApprovalPrompts = map[string]string{
 func main() {
 	// Determine file locations
 	cwd, _ := os.Getwd()
-	stateFile = filepath.Join(cwd, "tmp", "workflow-state.json")
+	homeDir, _ := os.UserHomeDir()
+	stateFile = filepath.Join(homeDir, "state", "workflow_state.json")
 	configFile = filepath.Join(cwd, "workflow.yaml")
 
 	// Load workflow configuration
