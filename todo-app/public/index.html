@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>My Todo List</h1>
+        </header>
+
+        <div class="add-todo">
+            <form id="todo-form">
+                <input
+                    type="text"
+                    id="todo-input"
+                    placeholder="Add a new todo..."
+                    maxlength="500"
+                    required
+                >
+                <button type="submit">Add</button>
+            </form>
+        </div>
+
+        <div class="todo-list">
+            <ul id="todos"></ul>
+        </div>
+
+        <div class="empty-state" id="empty-state">
+            <p>No todos yet. Add one above to get started!</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
